@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: edubridge
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python3 server.py"
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: FLUTTERWAVE_PAYMENT_LINK
+        sync: false
+      - key: STRIPE_PAYMENT_LINK
+        sync: false
+      - key: PAYPAL_PAYMENT_LINK
+        sync: false
+      - key: MOMO_PAYMENT_INSTRUCTIONS
+        sync: false
