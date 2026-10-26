@@ -1,6 +1,6 @@
-# EduBridge PostgreSQL Production Setup
+# Learnwella PostgreSQL Production Setup
 
-The current EduBridge app still runs on SQLite by default for easy local development. PostgreSQL production schema and setup files are now included so the platform can be moved to a real production database when deployed.
+The current Learnwella app still runs on SQLite by default for easy local development. PostgreSQL production schema and setup files are now included so the platform can be moved to a real production database when deployed.
 
 ## Why PostgreSQL
 
@@ -21,7 +21,7 @@ Use PostgreSQL for public launch because:
 ## Environment variable to use later
 
 ```bash
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/edubridge
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/learnwella
 ```
 
 ## Migration path

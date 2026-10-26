@@ -1,66 +1,72 @@
-# Render Port Binding Fix
+# Render port binding and health-check fix
 
-If Render shows this error:
+## The error
 
 ```text
 No open ports detected on 0.0.0.0
 Detected open ports on localhost -- did you mean to bind one of these to 0.0.0.0?
 ```
 
-It means the server is listening on `127.0.0.1` / `localhost` instead of `0.0.0.0`.
-
-This has been fixed in `server.py`:
+This means the server was listening on `127.0.0.1` / `localhost` instead of `0.0.0.0`.
+`server.py` now binds from the environment:
 
 ```python
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 ```
 
-Render can now detect the web service port.
+Render can detect the port. Set `HOST=0.0.0.0` and let Render supply `PORT` (usually `10000`).
 
-## Render settings
+## HEAD requests
 
-Use these settings:
-
-```text
-Build command: pip install -r requirements.txt
-Start command: python server.py
-```
-
-Environment variables:
-
-```text
-HOST=0.0.0.0
-ADMIN_EMAIL=your-email@example.com
-ADMIN_PASSWORD=your-strong-password
-APP_BASE_URL=https://your-render-url.onrender.com
-BIRD_API_KEY=bk_xxxxxxxxx
-BIRD_FROM=onboarding@messagebird.dev
-BIRD_REGION=us1
-```
-
-Usually you do not need to set `PORT` manually because Render provides it automatically. If Render asks for it, use:
-
-```text
-PORT=10000
-```
-
-## HEAD request fix
-
-Render may send `HEAD /` health checks. The app now supports `HEAD` requests, so this error is also fixed:
+Render may send `HEAD /` health checks. `server.py` implements `do_HEAD`, so this is fixed:
 
 ```text
 Unsupported method ('HEAD')
 ```
 
-## After updating GitHub
+Use `healthCheckPath: /version` in `render.yaml` for a cheap, explicit health check.
 
-Commit and push the fixed version:
+## Render settings
+
+```text
+Runtime:        Python 3
+Build command:  pip install -r requirements.txt
+Start command:  python3 server.py
+Health check:   /version
+```
+
+Environment variables (see `RENDER_DEPLOY.md` for the full table):
+
+```text
+HOST=0.0.0.0
+PORT=10000
+APP_BASE_URL=https://<your-service>.onrender.com
+ADMIN_EMAIL=your-email@example.com
+ADMIN_PASSWORD=your-strong-password
+BIRD_API_KEY=bk_xxxxxxxxx
+BIRD_FROM=onboarding@messagebird.dev
+BIRD_REGION=us1
+```
+
+Usually you do not need to set `PORT` manually because Render provides it. If asked, use `10000`.
+
+## v12 deployment gotchas
+
+1. **Push the restored `server.py`.** Older commits on `main` contain a truncated 57-line file
+   that imports but serves nothing. Confirm locally with `python3 -m py_compile server.py` and
+   by opening `/version`.
+2. **Push the `static/` folder.** `/static/styles.css` and `/static/app.js` must return 200;
+   otherwise the site loads unstyled.
+3. **Check `/version` after deploy.** It must say
+   `Learnwella v12-learnwella-brand-static-render ...`.
+
+## After updating GitHub
 
 ```bash
 git add .
-git commit -m "Fix Render port binding"
+git commit -m "Fix Render deployment"
 git push origin main
 ```
 
-Then redeploy on Render.
+Then let Auto-Deploy run, or use **Manual Deploy → Clear build cache & deploy**.

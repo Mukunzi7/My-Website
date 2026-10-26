@@ -1,2 +1,2 @@
-# EduBridge currently uses only the Python standard library.
+# Learnwella currently uses only the Python standard library.
 # Leave this file for Render/Railway/PaaS compatibility.

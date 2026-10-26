@@ -1,4 +1,4 @@
-app = "edubridge"
+app = "learnwella"
 primary_region = "jnb"
 
 [build]

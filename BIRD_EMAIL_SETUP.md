@@ -1,6 +1,6 @@
-# Bird / MessageBird Email Setup for EduBridge
+# Bird / MessageBird Email Setup for Learnwella
 
-EduBridge now supports Bird email for:
+Learnwella now supports Bird email for:
 
 - Email verification
 - Password reset emails
@@ -44,7 +44,7 @@ If your key starts with `bk_eu1_`, use:
 BIRD_REGION=eu1
 ```
 
-EduBridge can auto-detect `us1` or `eu1` from the key prefix, so `BIRD_REGION` is optional.
+Learnwella can auto-detect `us1` or `eu1` from the key prefix, so `BIRD_REGION` is optional.
 
 ## How it works in the Python app
 

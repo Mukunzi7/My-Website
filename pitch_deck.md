@@ -1,8 +1,8 @@
-# EduBridge Startup Pitch Deck
+# Learnwella Startup Pitch Deck
 
 ## 1. Title
 
-**EduBridge**  
+**Learnwella**  
 There's a version of your future still waiting to be found.
 
 A discovery, builder, funding, and marketplace platform for students and young builders.
@@ -22,7 +22,7 @@ Even when students find an opportunity, they often lack a place to build a stron
 
 ## 4. Solution
 
-EduBridge helps students:
+Learnwella helps students:
 
 1. Discover real opportunities matched to level, field, country, and deadline.
 2. Save and track opportunities inside an account.
@@ -66,7 +66,7 @@ Secondary users:
 
 ## 7. Market Opportunity
 
-EduBridge starts with African students and expands globally.
+Learnwella starts with African students and expands globally.
 
 Initial beachhead:
 
@@ -96,7 +96,7 @@ Potential revenue streams:
 
 ## 9. Competitive Advantage
 
-EduBridge is not only an opportunity list.
+Learnwella is not only an opportunity list.
 
 It combines:
 
@@ -130,7 +130,7 @@ Phase 3: Regional expansion
 
 ## 11. Impact
 
-EduBridge can help students:
+Learnwella can help students:
 
 - Find scholarships before deadlines.
 - Build stronger portfolios.
@@ -164,7 +164,7 @@ Next:
 
 ## 13. Ask
 
-EduBridge is looking for:
+Learnwella is looking for:
 
 - Pilot schools and universities
 - Youth-focused funders

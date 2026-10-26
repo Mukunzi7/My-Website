@@ -1,18 +1,30 @@
+# Render Blueprint for Learnwella.
+# One-click deploy: https://render.com/deploy?repo=https://github.com/Mukunzi7/My-Website
+# Secrets use "sync: false" so Render prompts for them instead of storing them in Git.
 services:
   - type: web
-    name: edubridge
+    name: learnwella
     env: python
     plan: free
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python3 server.py"
+    healthCheckPath: /version
     envVars:
       - key: HOST
         value: 0.0.0.0
       - key: PORT
         value: 10000
+      - key: APP_BASE_URL
+        sync: false
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
+        sync: false
+      - key: BIRD_API_KEY
+        sync: false
+      - key: BIRD_FROM
+        sync: false
+      - key: BIRD_REGION
         sync: false
       - key: FLUTTERWAVE_PAYMENT_LINK
         sync: false
@@ -22,3 +34,21 @@ services:
         sync: false
       - key: MOMO_PAYMENT_INSTRUCTIONS
         sync: false
+
+# PERSISTENT STORAGE (recommended before real users sign up):
+# The free plan has no disk, so SQLite and uploads are wiped on every deploy.
+# To enable, upgrade to a paid plan and uncomment both blocks below:
+#
+#    plan: starter          # replace "plan: free" above
+#    disk:
+#      name: data
+#      mountPath: /var/data
+#      sizeGB: 1
+#
+# and add these to envVars above:
+#      - key: DB_PATH
+#        value: /var/data/learnwella.sqlite3
+#      - key: UPLOAD_DIR
+#        value: /var/data/uploads
+#
+# See RENDER_DEPLOY.md for the full checklist.

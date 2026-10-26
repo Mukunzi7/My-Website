@@ -2,8 +2,9 @@
 __pycache__/
 *.pyc
 
-# Local database and uploaded files
+# Local database, mail outbox, and uploaded files
 edubridge.sqlite3
+mail_outbox.log
 uploads/*
 !uploads/.gitkeep
 

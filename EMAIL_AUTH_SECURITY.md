@@ -1,6 +1,6 @@
-# EduBridge Email Verification and Password Reset
+# Learnwella Email Verification and Password Reset
 
-EduBridge now includes production-style account security flows:
+Learnwella now includes production-style account security flows:
 
 - Email verification after signup
 - Login blocked until email is verified
@@ -10,7 +10,7 @@ EduBridge now includes production-style account security flows:
 
 ## Local development
 
-If SMTP is not configured, EduBridge writes emails to:
+If SMTP is not configured, Learnwella writes emails to:
 
 ```text
 mail_outbox.log
@@ -57,7 +57,7 @@ Recommended email providers:
 
 ## Bird / MessageBird email option
 
-EduBridge now supports Bird email as the first email provider. If `BIRD_API_KEY` is set, EduBridge sends verification and password-reset emails through Bird. If it is not set, EduBridge falls back to SMTP, then to `mail_outbox.log` in local development.
+Learnwella now supports Bird email as the first email provider. If `BIRD_API_KEY` is set, Learnwella sends verification and password-reset emails through Bird. If it is not set, Learnwella falls back to SMTP, then to `mail_outbox.log` in local development.
 
 Set these environment variables:
 

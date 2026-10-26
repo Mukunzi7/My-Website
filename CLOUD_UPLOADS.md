@@ -1,6 +1,6 @@
-# EduBridge Cloud Uploads
+# Learnwella Cloud Uploads
 
-EduBridge now supports optional cloud uploads through Cloudinary unsigned uploads.
+Learnwella now supports optional cloud uploads through Cloudinary unsigned uploads.
 
 By default, files are saved locally in:
 
@@ -8,7 +8,7 @@ By default, files are saved locally in:
 uploads/
 ```
 
-If Cloudinary environment variables are set, uploaded project files are also uploaded to Cloudinary and EduBridge stores the cloud URL. Downloads redirect to the cloud file URL.
+If Cloudinary environment variables are set, uploaded project files are also uploaded to Cloudinary and Learnwella stores the cloud URL. Downloads redirect to the cloud file URL.
 
 ## Environment variables
 
@@ -23,7 +23,7 @@ CLOUDINARY_UPLOAD_PRESET=your-unsigned-upload-preset
 2. Go to Settings → Upload.
 3. Create an unsigned upload preset.
 4. Add the preset name and cloud name to your hosting environment variables.
-5. Restart/redeploy EduBridge.
+5. Restart/redeploy Learnwella.
 
 ## Production recommendation
 

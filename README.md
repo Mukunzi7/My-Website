@@ -1,192 +1,172 @@
-# EduBridge Platform MVP v11
+# Learnwella — Platform MVP v12
 
-EduBridge is a full-stack platform by **Nexus Company Ltd** for opportunity discovery, student project building, sponsor conversations, project showcases, marketplace funding, direct Mobile Money support, and admin moderation.
+**Learnwella** (formerly EduBridge) is a full-stack platform by **Nexus Company Ltd** for
+opportunity discovery, student project building, sponsor conversations, project showcases,
+marketplace funding, direct Mobile Money support, and admin moderation.
 
-## Brand
+Everything runs on the Python standard library — no web framework, no package install needed.
+Pages are server-rendered by `server.py`, stored in SQLite, and styled by `static/styles.css`
+with a small progressive-enhancement script in `static/app.js`.
 
-The platform name is **EduBridge**. Every page is protected with **Nexus Company Ltd** copyright.
+> **Deploy to Render:** see **[RENDER_DEPLOY.md](RENDER_DEPLOY.md)** — one-click Blueprint link,
+> manual steps, required environment variables, persistent storage, and custom-domain setup.
 
-## Latest v11 additions
+---
 
-1. Visible v11 update banner added on every page so you can confirm the deployed version.
-2. Profile photo now appears in the upper-right navigation when a user is logged in.
-3. Project/media upload limit removed inside EduBridge; profile photos allow up to 10 MB.
-4. Static CSS/JS cache-busting added so Render/browser updates show correctly.
-5. `/version` endpoint added to verify the deployed version.
-6. Windows update checking guide added in `WINDOWS_UPDATE_GUIDE.md`.
-7. Dedicated `/messages` page added for sponsor-builder conversations.
-8. Marketplace cards now include a clear “Chat with builder” button.
-9. Name kept as **EduBridge** with a luxury visual refresh.
-10. Luxury logo mark added to the header and footer.
-11. Every page footer now includes: `© 2026 Nexus Company Ltd. All rights reserved.`
-12. Project photo/video showcase added.
-13. Builders can upload images, videos, pitch decks, ZIP files, or app/program files without an EduBridge app limit. Hosting/browser limits may still apply.
-9. Sponsor-to-builder project conversation area added on each project page.
-10. Builder dashboard now shows sponsor messages for their projects.
-11. Project descriptions must be stronger before marketplace submission.
-12. PostgreSQL schema updated with project messages.
-13. Brand decision notes added in `BRAND_RENAME.md`.
+## What's in this repo
 
-## Existing production features
+| File | Purpose |
+| --- | --- |
+| `server.py` | The entire app: routing, HTML rendering, auth, emails, uploads, admin, SEO routes |
+| `static/styles.css` | Full site stylesheet (all page, form, dashboard and admin classes) |
+| `static/app.js` | AJAX profile-photo + project-file uploads, filter helpers, scroll reveal |
+| `render.yaml` | Render Blueprint (service name, build/start commands, health check) |
+| `Dockerfile`, `Procfile`, `fly.toml`, `cloudbuild.yaml` | Alternative Docker / Cloud Run / Fly deployments |
+| `.env.example` | Template for every environment variable the app understands |
+| `database_postgresql.sql` | Production schema if you migrate off SQLite |
+| `pitch_deck.html`, `pitch_deck.md` | Investor/partner pitch deck |
 
-- Bird / MessageBird email support for verification and password reset emails.
-- Real email verification flow after signup.
-- Login blocked until email is verified.
-- Password reset flow with expiring reset tokens.
-- Project moderation: public submissions go to `pending_review` first.
-- Admin moderation queue for approving/rejecting projects.
-- Admin controls: project approval/rejection/deletion, user verification, role management without admin promotion, temporary password reset, user deletion, opportunity deletion, and RSS sync.
-- Optional Cloudinary cloud upload hook for project files.
-- PostgreSQL production schema and setup documentation.
+---
+
+## v12 changes
+
+1. **Restored the full app.** Commit `0c111b6` accidentally truncated `server.py` to 57 lines.
+   All ~1,000 lines of routes, rendering and handlers are back.
+2. **Added the missing front end.** `static/styles.css` and `static/app.js` were referenced by
+   every page but had never been committed; both now exist and are tracked.
+3. **Aligned the brand on Learnwella** across code, emails, docs, config files, and pitch deck.
+4. **Added `DB_PATH` and `UPLOAD_DIR` environment variables** so SQLite and uploads can live on a
+   persistent Render Disk instead of the ephemeral container filesystem.
+5. **Bumped `APP_VERSION` to `v12-learnwella-brand-static-render`** so you can verify a deployment
+   at `/version` and browser caches pick up the new CSS/JS.
+6. **Removed committed runtime data** (`edubridge.sqlite3`, `mail_outbox.log`) from Git and
+   replaced the real default admin password in `.env.example` with a placeholder.
+7. **Added `RENDER_DEPLOY.md`** with a one-click deploy path and a production checklist.
+
+Legacy internal identifiers `edubridge.sqlite3` (default DB filename) and
+`edubridge_session` (cookie name) are intentionally kept so existing databases and sessions
+are not broken. They are not shown anywhere in the UI.
+
+---
 
 ## Run locally
 
+From the **repository root** (there is no `edubridge_platform` subfolder):
+
 ```bash
-cd edubridge_platform
 python3 server.py
 ```
 
-Open:
+Open <http://127.0.0.1:8080>. The app creates a fresh SQLite database and seeds demo
+opportunities and projects on first start.
 
-```text
-http://127.0.0.1:8080
-```
-
-## Bird / MessageBird email support
-
-Set this in Render or your local environment, replacing the placeholder with your real key:
+To use a different port or storage location:
 
 ```bash
-BIRD_API_KEY=bk_xxxxxxxxx
-BIRD_FROM=onboarding@messagebird.dev
-BIRD_REGION=us1
+PORT=8080 DB_PATH=/tmp/learnwella.sqlite3 UPLOAD_DIR=/tmp/learnwella-uploads python3 server.py
 ```
 
-Never commit your real Bird API key to GitHub. A TypeScript example is included in `examples/bird-email-example.ts`.
-
-## Local email behavior
-
-If Bird/SMTP is not configured, verification and password reset emails are written to:
+Verify what is running:
 
 ```text
-mail_outbox.log
+http://127.0.0.1:8080/version
+→ Learnwella v12-learnwella-brand-static-render - full app restored, static assets included, Render-ready
 ```
 
-Open that file and copy the verification/reset links during local testing.
+---
 
-## Admin login
+## Environment variables
 
-For local testing, the app creates a default admin:
+Copy `.env.example` and set the values in your host's dashboard (never commit real secrets).
 
-```text
-Email: honoremukunzi6@gmail.com
-Password: Admin123!
-```
+| Variable | Required in production | Notes |
+| --- | --- | --- |
+| `HOST` | yes | Must be `0.0.0.0` on Render/Docker |
+| `PORT` | yes | Render supplies this (usually `10000`) |
+| `APP_BASE_URL` | yes | `https://<your-service>.onrender.com` — used in verification email links |
+| `ADMIN_EMAIL` | yes | Owner admin account created at startup |
+| `ADMIN_PASSWORD` | yes | **Set a strong unique value.** The code default is for local testing only. |
+| `BIRD_API_KEY` | strongly recommended | Without email, new users cannot verify their address or log in |
+| `BIRD_FROM`, `BIRD_REGION` | with Bird | Sender address and `us1`/`eu1` |
+| `SMTP_*` | alternative | Used if Bird is not configured |
+| `DB_PATH` | with a Render Disk | e.g. `/var/data/learnwella.sqlite3` |
+| `UPLOAD_DIR` | with a Render Disk | e.g. `/var/data/uploads` |
+| `CLOUDINARY_*` | optional | Offloads project uploads to Cloudinary |
+| `MAX_UPLOAD_BYTES` | optional | `0` = no app-level limit; profile photos are capped at 10 MB |
 
-For production, set Render environment variables:
+---
 
-```bash
-ADMIN_EMAIL=you@example.com
-ADMIN_PASSWORD='A-Very-Strong-Password'
-```
+## Email is not optional in production
+
+Signup requires email verification and login is blocked until verification succeeds. If neither
+Bird nor SMTP is configured, verification links are written to `mail_outbox.log` **inside the
+container**, which is invisible to your users and wiped on redeploy. Configure `BIRD_API_KEY`
+(or SMTP) before launching. See `BIRD_EMAIL_SETUP.md` and `EMAIL_AUTH_SECURITY.md`.
+
+---
 
 ## Main pages
 
-- `/account` — change account name, password, and profile photo
+| Route | Purpose |
+| --- | --- |
+| `/` | Landing page with story and impact section |
+| `/opportunities` | Searchable opportunities directory with bookmarks |
+| `/signup`, `/login` | Account creation and login |
+| `/verify-email?token=…` | Email verification |
+| `/forgot-password`, `/reset-password?token=…` | Password reset |
+| `/dashboard` | User dashboard and sponsor message inbox |
+| `/messages` | Sponsor–builder conversations |
+| `/workspace` | Private builder workspace, Mobile Money details, file uploads |
+| `/marketplace` | Approved public project marketplace |
+| `/project?id=…` | Showcase, sponsor chat, funding, files |
+| `/pledge`, `/payment/start`, `/payment/success` | Support / pledge flow |
+| `/account` | Name, password, profile photo |
+| `/admin` | Moderation queue, users, roles, opportunities, RSS sync |
+| `/version` | Plain-text deploy verification |
+| `/robots.txt`, `/sitemap.xml` | SEO / crawler files |
 
-- `/` — landing page with story/impact section
-- `/opportunities` — opportunities directory
-- `/signup` — create account
-- `/verify-email?token=...` — email verification
-- `/login` — login
-- `/forgot-password` — request password reset
-- `/reset-password?token=...` — reset password
-- `/dashboard` — user dashboard and sponsor message inbox
-- `/messages` — dedicated sponsor-builder messages page
-- `/workspace` — private builder workspace with Mobile Money fields and file/media upload
-- `/marketplace` — approved public project marketplace
-- `/project?id=...` — project showcase, sponsor chat, funding, and files
-- `/admin` — admin dashboard and moderation queue
-- `/robots.txt` — Google crawler file
-- `/sitemap.xml` — Google sitemap
+---
+
+## Admin account
+
+On first start the app creates an owner admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD`. For local
+testing only, the built-in default is printed in `server.py` — **do not use it in production**.
+Set both environment variables on your host before the first deploy; changing `ADMIN_PASSWORD`
+later does not reset an already-created account, so choose it carefully.
+
+---
 
 ## Direct Mobile Money funding
 
-Each creator adds their own Mobile Money details in the workspace before submitting a project for review.
+Each creator adds their own Mobile Money details in the workspace before submitting a project
+for review. Sponsors send funds directly to the creator; Learnwella records the pledge/support
+activity but never collects the money. See `PAYMENTS.md`.
 
-Sponsors send funds directly to the creator. EduBridge records the pledge/support activity but does not collect the money.
+---
 
-See:
+## More documentation
 
-```text
-PAYMENTS.md
-```
+| File | Topic |
+| --- | --- |
+| `RENDER_DEPLOY.md` | **Render hosting, one-click deploy, env vars, disk, domain** |
+| `RENDER_FIX.md` | Port binding and HEAD health-check notes |
+| `DEPLOYMENT.md` | Cloud Run, Docker and other hosts |
+| `DOMAIN_AND_GOOGLE_DEPLOYMENT.md` | Domains, Google Search Console |
+| `GITHUB_GUIDE.md` | Pushing this repo |
+| `BIRD_EMAIL_SETUP.md`, `EMAIL_AUTH_SECURITY.md` | Transactional email |
+| `CLOUD_UPLOADS.md` | Optional Cloudinary uploads |
+| `POSTGRESQL_SETUP.md` | Future PostgreSQL migration |
+| `WINDOWS_UPDATE_GUIDE.md` | Checking versions on Windows |
+| `BRAND_RENAME.md` | Brand decision record |
 
-## Cloud uploads
+---
 
-Optional Cloudinary uploads are supported. See:
+## Recommended production upgrades
 
-```text
-CLOUD_UPLOADS.md
-```
+1. Add a persistent Render Disk (or migrate to PostgreSQL) — SQLite on ephemeral disk is lost on redeploy.
+2. Move uploaded files to Cloudinary / S3 / R2; a disk alone is not a backup.
+3. Add file/content scanning for uploads and audit logs for admin actions.
+4. Add email templates, alerts, and deadline reminders.
+5. Add verified payment confirmations if payments are automated.
 
-## Email verification/password reset setup
-
-See:
-
-```text
-EMAIL_AUTH_SECURITY.md
-BIRD_EMAIL_SETUP.md
-```
-
-## PostgreSQL production setup
-
-The app still runs SQLite by default for local development. PostgreSQL production schema and migration notes are included:
-
-```text
-POSTGRESQL_SETUP.md
-database_postgresql.sql
-```
-
-## Domain, Google deployment, and GitHub
-
-Read:
-
-```text
-BRAND_RENAME.md
-DOMAIN_AND_GOOGLE_DEPLOYMENT.md
-GITHUB_GUIDE.md
-DEPLOYMENT.md
-RENDER_FIX.md
-```
-
-## Pitch deck
-
-```text
-pitch_deck.html
-pitch_deck.md
-```
-
-## Important production upgrades still recommended
-
-1. Add a full PostgreSQL adapter or migrate to SQLAlchemy.
-2. Add verified payment confirmations if you later automate payments.
-3. Add file/content scanning for uploads.
-4. Add email templates and better deliverability setup.
-5. Add private/direct messaging notifications for sponsor-builder conversations.
-6. Add audit logs for all admin actions.
-
-## Upload limits
-
-- Project/media/file uploads: no fixed EduBridge app limit by default (`MAX_UPLOAD_BYTES=0`). Your host, browser, memory, or network may still limit very large files.
-- Profile photos: max 10 MB.
-
-## If profile photo upload does not work
-
-1. Make sure you are logged in.
-2. Go to `/account`.
-3. Choose an image file under 10 MB.
-4. After uploading, hard refresh the browser.
-5. If on Render, open `/version` and confirm it says v11.
-
-If `/version` does not show v11, Render is still running old code.
+© 2026 Nexus Company Ltd. All rights reserved.

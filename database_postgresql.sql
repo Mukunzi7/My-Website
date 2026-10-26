@@ -1,4 +1,4 @@
--- EduBridge PostgreSQL production schema
+-- Learnwella PostgreSQL production schema
 -- Run this in a PostgreSQL database before migrating production data.
 
 CREATE TABLE IF NOT EXISTS users (
