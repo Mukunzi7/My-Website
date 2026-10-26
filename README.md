@@ -8,8 +8,26 @@ Everything runs on the Python standard library — no web framework, no package 
 Pages are server-rendered by `server.py`, stored in SQLite, and styled by `static/styles.css`
 with a small progressive-enhancement script in `static/app.js`.
 
-> **Deploy to Render:** see **[RENDER_DEPLOY.md](RENDER_DEPLOY.md)** — one-click Blueprint link,
-> manual steps, required environment variables, persistent storage, and custom-domain setup.
+## 🚀 Launch it from this repo (about 2 minutes)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Mukunzi7/My-Website)
+
+Direct link: <https://render.com/deploy?repo=https://github.com/Mukunzi7/My-Website>
+
+1. Click the button, sign in to Render with GitHub, and grant it access to this repository.
+2. **Blueprint Path:** leave blank — it defaults to `render.yaml` at the repo root.
+3. The preview must say **Create web service `70scholar`**. Fill the environment variables
+   it asks for (see the table in [RENDER_DEPLOY.md](RENDER_DEPLOY.md)).
+4. Click **Apply**. Your site will be at <https://70scholar.onrender.com>.
+
+> If the preview still says `learnwella`, hard-refresh or reopen the deploy link in a new
+> tab — Render reads `render.yaml` when the page loads.
+
+Before inviting real users, configure an email provider (Bird or SMTP) so verification emails
+are delivered, and add a Render Disk so accounts and uploads survive deploys.
+
+Full guide: **[RENDER_DEPLOY.md](RENDER_DEPLOY.md)** — one-click Blueprint link, manual steps,
+required environment variables, persistent storage, and custom-domain setup.
 
 ---
 
