@@ -34,9 +34,9 @@ with a small progressive-enhancement script in `static/app.js`.
    verification and password-reset emails, `/version`, the pitch deck, and all documentation.
 2. **Bumped `APP_VERSION` to `v13-70scholar-brand`** so `/version` proves which build is live
    and browser caches pick up the new CSS/JS.
-3. **Kept the Render service identifier `learnwella`** in `render.yaml` on purpose — it is the
-   free host name (`https://learnwella.onrender.com`), not the brand. Add a custom domain such
-   as `70scholar.com` when you are ready (see `DOMAIN_AND_GOOGLE_DEPLOYMENT.md`).
+3. **Renamed the Render service to `70scholar`** in `render.yaml`, so the free URL is
+   `https://70scholar.onrender.com`. This requires starting a fresh Blueprint flow; see
+   `RENDER_DEPLOY.md`. You can still add a custom domain such as `70scholar.com` later.
 
 ### Earlier v12 fixes (already included)
 
@@ -87,7 +87,7 @@ Copy `.env.example` and set the values in your host's dashboard (never commit re
 | --- | --- | --- |
 | `HOST` | yes | Must be `0.0.0.0` on Render/Docker |
 | `PORT` | yes | Render supplies this (usually `10000`) |
-| `APP_BASE_URL` | yes | `https://<your-service>.onrender.com` — used in verification email links |
+| `APP_BASE_URL` | yes | `https://70scholar.onrender.com` — used in verification email links |
 | `ADMIN_EMAIL` | yes | Owner admin account created at startup |
 | `ADMIN_PASSWORD` | yes | **Set a strong unique value.** The code default is for local testing only. |
 | `BIRD_API_KEY` | strongly recommended | Without email, new users cannot verify their address or log in |

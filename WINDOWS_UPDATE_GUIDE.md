@@ -60,7 +60,7 @@ cache & deploy** in the Render dashboard.
 Open:
 
 ```text
-https://<your-service>.onrender.com/version
+https://70scholar.onrender.com/version
 ```
 
 You must see the same v13 string. Also open `/static/styles.css` — it should return CSS, not a

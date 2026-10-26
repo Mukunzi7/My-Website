@@ -41,7 +41,7 @@ Environment variables (see `RENDER_DEPLOY.md` for the full table):
 ```text
 HOST=0.0.0.0
 PORT=10000
-APP_BASE_URL=https://<your-service>.onrender.com
+APP_BASE_URL=https://70scholar.onrender.com
 ADMIN_EMAIL=your-email@example.com
 ADMIN_PASSWORD=your-strong-password
 BIRD_API_KEY=bk_xxxxxxxxx

@@ -16,11 +16,14 @@ pushed to `main` on <https://github.com/Mukunzi7/My-Website>. Nothing to do here
 The deploy button always builds whatever is on `main` at the moment you click it, so if you
 make more changes, push them before deploying.
 
-> **Service name note:** the Blueprint service is named `learnwella`. That is only the Render
-> infrastructure label and gives you the free URL `https://learnwella.onrender.com`. The site
-> itself is branded **70Scholar**. Keep the service name as-is so your current Blueprint
-> screen stays valid; add a custom domain such as `70scholar.com` later if you want the URL
-> to match the brand.
+> **Service name:** the Blueprint service is now `70scholar`, giving you the free URL
+> `https://70scholar.onrender.com`.
+>
+> **If you already had a Blueprint screen open that said `learnwella`, abandon it.**
+> Close that tab and re-open the deploy link below — Render reads `render.yaml` fresh
+> from `main` at that moment. If a `learnwella` service was already created, delete it
+> first (Dashboard → service → Settings → Delete); free-tier services hold no
+> persistent data, so nothing is lost. Otherwise Render will create a second service.
 
 ---
 
@@ -38,12 +41,12 @@ make more changes, push them before deploying.
    ```
 
 3. Render detects `render.yaml` and shows a **Blueprint** preview with one service named
-   `learnwella`. Give the Blueprint a name (e.g. `learnwella`) and click **Apply**.
+   `70scholar`. Give the Blueprint a name (e.g. `70scholar`) and click **Apply**.
 4. When prompted, fill in the secret environment variables listed in step 3 below.
 5. Wait for the build (usually 1–3 minutes). Your site will be at:
 
    ```text
-   https://learnwella.onrender.com
+   https://70scholar.onrender.com
    ```
 
    (Render appends a suffix if that name is taken — use the URL it shows in the dashboard.)
@@ -80,7 +83,7 @@ In Render: your service → **Environment** → **Add Environment Variable**.
 | --- | --- | --- |
 | `HOST` | `0.0.0.0` | Required; otherwise Render reports "No open ports detected" |
 | `PORT` | `10000` | Render injects this automatically; set it explicitly if your plan doesn't |
-| `APP_BASE_URL` | `https://<your-service>.onrender.com` | Base URL used in verification emails and `sitemap.xml` (no trailing slash) |
+| `APP_BASE_URL` | `https://70scholar.onrender.com` | Base URL used in verification emails and `sitemap.xml` (no trailing slash) |
 | `ADMIN_EMAIL` | your real email | Owner admin created on first boot |
 | `ADMIN_PASSWORD` | a long unique password | **Critical.** The built-in default is public in the code |
 | `BIRD_API_KEY` | `bk_…` | Sends verification / password-reset emails |
@@ -147,7 +150,7 @@ either way — a disk is not a backup.
 
 | Check | Expected |
 | --- | --- |
-| `https://<service>.onrender.com/` | Styled 70Scholar landing page (dark hero, gold buttons) |
+| `https://70scholar.onrender.com/` | Styled 70Scholar landing page (dark hero, gold buttons) |
 | `…/version` | `70Scholar v13-70scholar-brand - full app restored, static assets included, Render-ready` |
 | `…/static/styles.css` | 200, CSS text (if 404, the `static/` folder wasn't pushed) |
 | `…/static/app.js` | 200, JS text |

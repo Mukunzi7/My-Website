@@ -20,7 +20,7 @@ git push origin main
 ```
 
 Render has **Auto-Deploy** enabled by default, so a push to `main` triggers a new deployment.
-Confirm the new build at `https://<your-service>.onrender.com/version`.
+Confirm the new build at `https://70scholar.onrender.com/version`.
 
 ## Applying a supplied bundle or diff (if you ever need to)
 

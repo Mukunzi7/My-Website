@@ -15,7 +15,7 @@ names like:
 ```
 
 You do not need a domain to start. Deploy to Render first and use the free URL
-`https://<your-service>.onrender.com`, then add a custom domain later.
+`https://70scholar.onrender.com`, then add a custom domain later.
 
 ---
 
@@ -31,7 +31,7 @@ verification emails and `sitemap.xml` are generated from it.
 1. Render dashboard → your `70scholar` service → **Settings** → **Custom Domains**.
 2. Click **Add Custom Domain** and enter e.g. `www.70scholar.com`.
 3. Render shows the DNS records to add at your registrar:
-   - usually a **CNAME** for `www` pointing at `<your-service>.onrender.com`
+   - usually a **CNAME** for `www` pointing at `70scholar.onrender.com`
    - and/or an **A record** for the apex domain
 4. Add the records, wait for DNS propagation (minutes to a few hours), then click **Verify**.
 5. Render provisions a free Let's Encrypt TLS certificate automatically. Always force HTTPS.
