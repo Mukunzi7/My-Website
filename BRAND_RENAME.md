@@ -1,15 +1,19 @@
-# Brand decision: Learnwella
+# Brand decision: 70Scholar
 
-**The platform name is Learnwella.** This is the single source of truth for the brand.
+**The platform name is 70Scholar.** This is the single source of truth for the brand.
 
 ## History
 
-- The project started as **EduBridge** (v1–v11).
-- Commit `0c111b6` renamed the app title to **Learnwella**, but that commit also accidentally
-  deleted most of `server.py`. In v12 the app was restored and the rename completed across
-  the entire repository.
-- `README.md`, `pitch_deck.html`, `pitch_deck.md`, all setup guides, config files, page copy,
-  emails, the update banner and the `/version` response now say **Learnwella**.
+| Version | Name |
+| --- | --- |
+| v1–v11 | EduBridge |
+| v12 | Learnwella |
+| v13 onward | **70Scholar** |
+
+The v13 rename changed every user-visible string: `APP_NAME`, the SVG wordmark
+(**70** light + **Scholar** gold), page titles and meta descriptions, the update banner,
+`/version`, all verification and password-reset emails, the notice pages, the pitch deck,
+and every document and config file in this repository.
 
 ## Company and copyright
 
@@ -21,23 +25,25 @@ The product is owned by **Nexus Company Ltd**. Every page footer includes:
 
 ## Logo
 
-The header/footer logo is an inline SVG gradient mark (gold → rose) plus the wordmark
-**Learn** (light) + **wella** (gold). It is generated in `brand_logo()` in `server.py`, so no
-image file is needed. The pitch deck uses the same typography.
+`brand_logo()` in `server.py` emits an inline SVG gradient mark (gold → rose, gradient id
+`s70-g`) plus the wordmark `70` + `Scholar`. No image file is needed. `pitch_deck.html`
+uses the same split wordmark. CSS hooks are the generic `.logo-first` / `.logo-last`.
 
-## Internal identifiers kept for compatibility
+## Identifiers deliberately NOT renamed
 
-These are **not** user-visible and are deliberately unchanged so existing data keeps working:
+These are invisible infrastructure labels, not branding. Renaming them breaks things.
 
-| Identifier | Reason |
+| Identifier | Why it stays |
 | --- | --- |
 | `edubridge.sqlite3` | Default SQLite filename; renaming would orphan existing databases |
 | `edubridge_session` | Session cookie name; renaming would log out every user |
+| `learnwella` in `render.yaml` | Render **service** name. A Blueprint name change makes Render try to create a second service. Your free URL is `https://learnwella.onrender.com`. |
+| `Mukunzi7/My-Website` | GitHub repo name; renaming it would break the deploy button and clone URLs |
 
-Use `DB_PATH` to point at a differently named database file in production.
+Use `DB_PATH` to choose a new database filename, and add a custom domain to get a
+branded URL. See `DOMAIN_AND_GOOGLE_DEPLOYMENT.md`.
 
 ## Domain note
 
-Check domain and trademark availability before buying a domain or launching publicly —
-`learnwella.com`, `learnwella.rw`, `learnwella.app`, and similar names may already be taken.
-See `DOMAIN_AND_GOOGLE_DEPLOYMENT.md`.
+Check availability and trademarks before buying — `70scholar.com`, `70scholar.rw`,
+`70scholar.app`, `70scholar.africa`, and similar names may already be taken.

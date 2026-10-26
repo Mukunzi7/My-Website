@@ -1,16 +1,16 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/learnwella:$COMMIT_SHA', '.']
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/70scholar:$COMMIT_SHA', '.']
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/learnwella:$COMMIT_SHA']
+    args: ['push', 'gcr.io/$PROJECT_ID/70scholar:$COMMIT_SHA']
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
-      - 'learnwella'
+      - '70scholar'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/learnwella:$COMMIT_SHA'
+      - 'gcr.io/$PROJECT_ID/70scholar:$COMMIT_SHA'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -21,4 +21,4 @@ steps:
       - '--set-env-vars'
       - 'HOST=0.0.0.0,PORT=8080'
 images:
-  - 'gcr.io/$PROJECT_ID/learnwella:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/70scholar:$COMMIT_SHA'

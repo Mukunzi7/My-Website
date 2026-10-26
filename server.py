@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Learnwella MVP: landing + authentication + opportunities + builder workspace + funding marketplace.
+"""70Scholar MVP: landing + authentication + opportunities + builder workspace + funding marketplace.
 Run: python3 server.py  then open http://127.0.0.1:8080
 No external Python packages required.
 """
@@ -19,13 +19,13 @@ STATIC_DIR = ROOT / "static"
 UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
-APP_NAME = "Learnwella"
-APP_VERSION = "v12-learnwella-brand-static-render"
+APP_NAME = "70Scholar"
+APP_VERSION = "v13-70scholar-brand"
 COMPANY_NAME = "Nexus Company Ltd"
 APP_TAGLINE = "Find the opportunity. Show the build. Start the conversation."
 OWNER_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "honoremukunzi6@gmail.com").strip().lower()
 SESSION_COOKIE = "edubridge_session"
-MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", "0"))  # 0 means no Learnwella app limit for project/media uploads
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", "0"))  # 0 means no 70Scholar app limit for project/media uploads
 
 PAYMENT_LINKS = {
     "flutterwave": os.environ.get("FLUTTERWAVE_PAYMENT_LINK", ""),
@@ -44,7 +44,7 @@ SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
-SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "noreply@learnwella.local")
+SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "noreply@70scholar.local")
 SMTP_TLS = os.environ.get("SMTP_TLS", "1") != "0"
 # Bird / MessageBird email API. Keep the API key in environment variables, never in code.
 BIRD_API_KEY = os.environ.get("BIRD_API_KEY", "")
@@ -155,7 +155,7 @@ def send_email(to_email: str, subject: str, body: str, html_body: str | None = N
             smtp.send_message(msg)
     else:
         with MAIL_OUTBOX.open("a", encoding="utf-8") as f:
-            f.write("\n--- Learnwella development email ---\n")
+            f.write("\n--- 70Scholar development email ---\n")
             f.write(f"To: {to_email}\nSubject: {subject}\n\n{body}\n")
             if html_body:
                 f.write(f"\nHTML:\n{html_body}\n")
@@ -172,21 +172,21 @@ def create_email_token(user_id: int, purpose: str, hours: int = 24) -> str:
 def send_verification_email(user_id: int, email: str, name: str) -> None:
     token = create_email_token(user_id, "verify_email", 48)
     link = f"{APP_BASE_URL}/verify-email?token={token}"
-    text = f"Hi {name},\n\nWelcome to Learnwella. Please verify your email address using this link:\n\n{link}\n\nIf you did not create this account, ignore this email.\n\nLearnwella"
-    html_msg = f"<p>Hi {e(name)},</p><p>Welcome to Learnwella. Please verify your email address:</p><p><a href='{e(link)}'>Verify my email</a></p><p>If you did not create this account, ignore this email.</p><p>Learnwella</p>"
-    send_email(email, "Verify your Learnwella email", text, html_msg)
+    text = f"Hi {name},\n\nWelcome to 70Scholar. Please verify your email address using this link:\n\n{link}\n\nIf you did not create this account, ignore this email.\n\n70Scholar"
+    html_msg = f"<p>Hi {e(name)},</p><p>Welcome to 70Scholar. Please verify your email address:</p><p><a href='{e(link)}'>Verify my email</a></p><p>If you did not create this account, ignore this email.</p><p>70Scholar</p>"
+    send_email(email, "Verify your 70Scholar email", text, html_msg)
 
 def send_password_reset_email(user_id: int, email: str, name: str) -> None:
     token = create_email_token(user_id, "password_reset", 2)
     link = f"{APP_BASE_URL}/reset-password?token={token}"
-    text = f"Hi {name},\n\nUse this link to reset your Learnwella password. It expires in 2 hours:\n\n{link}\n\nIf you did not ask for this, ignore this email.\n\nLearnwella"
-    html_msg = f"<p>Hi {e(name)},</p><p>Use this link to reset your Learnwella password. It expires in 2 hours:</p><p><a href='{e(link)}'>Reset my password</a></p><p>If you did not ask for this, ignore this email.</p><p>Learnwella</p>"
-    send_email(email, "Reset your Learnwella password", text, html_msg)
+    text = f"Hi {name},\n\nUse this link to reset your 70Scholar password. It expires in 2 hours:\n\n{link}\n\nIf you did not ask for this, ignore this email.\n\n70Scholar"
+    html_msg = f"<p>Hi {e(name)},</p><p>Use this link to reset your 70Scholar password. It expires in 2 hours:</p><p><a href='{e(link)}'>Reset my password</a></p><p>If you did not ask for this, ignore this email.</p><p>70Scholar</p>"
+    send_email(email, "Reset your 70Scholar password", text, html_msg)
 
 def cloudinary_upload(filename: str, mime: str, content: bytes) -> str:
     if not (CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET):
         return ""
-    boundary = "----Learnwella" + secrets.token_hex(12)
+    boundary = "----70Scholar" + secrets.token_hex(12)
     def part(name, value, file_name=None, content_type=None):
         head = f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\""
         if file_name:
@@ -241,13 +241,13 @@ def init_db() -> None:
 
         for item in OPPORTUNITY_SEEDS:
             conn.execute("""INSERT OR IGNORE INTO opportunities(type,title,provider,country,level,deadline,url,summary,tags,source,created_at) VALUES(:type,:title,:provider,:country,:level,:deadline,:url,:summary,:tags,:source,:created_at)""", {**item, "created_at": now_iso()})
-        demo = conn.execute("SELECT id FROM users WHERE email=?", ("demo@learnwella.local",)).fetchone()
+        demo = conn.execute("SELECT id FROM users WHERE email=?", ("demo@70scholar.local",)).fetchone()
         if demo:
             demo_id = demo["id"]
             conn.execute("UPDATE users SET email_verified=1 WHERE id=?", (demo_id,))
         else:
             salt, hashed = hash_password("ChangeMe123!")
-            cur = conn.execute("INSERT INTO users(name,email,password_hash,salt,role,email_verified,created_at) VALUES(?,?,?,?,?,?,?)", ("Learnwella Demo Studio","demo@learnwella.local",hashed,salt,"maker",1,now_iso()))
+            cur = conn.execute("INSERT INTO users(name,email,password_hash,salt,role,email_verified,created_at) VALUES(?,?,?,?,?,?,?)", ("70Scholar Demo Studio","demo@70scholar.local",hashed,salt,"maker",1,now_iso()))
             demo_id = cur.lastrowid
         if conn.execute("SELECT COUNT(*) c FROM projects WHERE user_id=?", (demo_id,)).fetchone()["c"] == 0:
             for p in DEMO_PROJECTS:
@@ -257,7 +257,7 @@ def init_db() -> None:
         existing_admin = conn.execute("SELECT id FROM users WHERE email=?", (admin_email,)).fetchone()
         if not existing_admin:
             salt, hashed = hash_password(admin_password)
-            conn.execute("INSERT INTO users(name,email,password_hash,salt,role,email_verified,created_at) VALUES(?,?,?,?,?,?,?)", ("Learnwella Owner Admin", admin_email, hashed, salt, "admin", 1, now_iso()))
+            conn.execute("INSERT INTO users(name,email,password_hash,salt,role,email_verified,created_at) VALUES(?,?,?,?,?,?,?)", ("70Scholar Owner Admin", admin_email, hashed, salt, "admin", 1, now_iso()))
         else:
             conn.execute("UPDATE users SET role='admin', email_verified=1 WHERE email=?", (admin_email,))
         # Only the configured owner email may remain admin. Others are downgraded.
@@ -276,7 +276,7 @@ def flash(message: str, kind: str = "info") -> str:
     return f"<div class='flash {e(kind)}'>{e(message)}</div>" if message else ""
 
 def brand_logo() -> str:
-    return f"""<span class='logo-mark' aria-hidden='true'><svg viewBox='0 0 44 44' role='img'><defs><linearGradient id='lw-g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#F2A93E'/><stop offset='1' stop-color='#E8768A'/></linearGradient></defs><rect x='3' y='3' width='38' height='38' rx='12' fill='url(#lw-g)'/><path d='M14 13h17M14 22h13M14 31h17' fill='none' stroke='#10152B' stroke-width='4' stroke-linecap='round'/></svg></span><span class='logo-text'><span class='logo-first'>Learn</span><span class='logo-last'>wella</span></span>"""
+    return f"""<span class='logo-mark' aria-hidden='true'><svg viewBox='0 0 44 44' role='img'><defs><linearGradient id='s70-g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#F2A93E'/><stop offset='1' stop-color='#E8768A'/></linearGradient></defs><rect x='3' y='3' width='38' height='38' rx='12' fill='url(#s70-g)'/><path d='M14 13h17M14 22h13M14 31h17' fill='none' stroke='#10152B' stroke-width='4' stroke-linecap='round'/></svg></span><span class='logo-text'><span class='logo-first'>70</span><span class='logo-last'>Scholar</span></span>"""
 
 def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: str = "") -> str:
     logo = brand_logo()
@@ -291,7 +291,7 @@ def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: s
         nav_auth = f"""<a class="nav-link {'is-active' if active=='dashboard' else ''}" href="/dashboard">Dashboard</a><a class="nav-link {'is-active' if active=='workspace' else ''}" href="/workspace">Workspace</a><a class="nav-link {'is-active' if active=='messages' else ''}" href="/messages">Messages</a><a class="nav-link {'is-active' if active=='account' else ''}" href="/account">Account</a>{admin_link}{profile_link}<form class="logout-form" action="/logout" method="post"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><button>Log out</button></form>"""
     else:
         nav_auth = "<a class='nav-link' href='/login'>Log in</a><a class='pill small' href='/signup'>Create account</a>"
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><div class="update-banner"><strong>Learnwella v12 is live:</strong> full app restored, brand aligned, styling added, and ready for Render. <a href="/version">Check version</a></div><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p><p class="copyright">© {datetime.now(timezone.utc).year} {COMPANY_NAME}. All rights reserved.</p></footer><script src="/static/app.js?v={APP_VERSION}"></script></body></html>"""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><div class="update-banner"><strong>70Scholar v13 is live:</strong> full app restored, brand aligned, styling added, and ready for Render. <a href="/version">Check version</a></div><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p><p class="copyright">© {datetime.now(timezone.utc).year} {COMPANY_NAME}. All rights reserved.</p></footer><script src="/static/app.js?v={APP_VERSION}"></script></body></html>"""
 
 def render_home(user):
     with db() as conn:
@@ -300,8 +300,8 @@ def render_home(user):
             "projects": conn.execute("SELECT COUNT(*) c FROM projects WHERE status='public'").fetchone()["c"],
             "pledged": conn.execute("SELECT COALESCE(SUM(amount),0) c FROM pledges").fetchone()["c"],
         }
-    story_section = f'''<section class="story-section"><div class="story-inner"><p class="eyebrow eyebrow-dark">The story Learnwella is building</p><h2>A path for the student who almost gave up searching.</h2><p>Learnwella was created for students who keep asking, "Where are the scholarships, internships, competitions, sponsors, and people who will believe in my project?" The goal is to make answers easier to find, applications easier to prepare, and student projects easier to support.</p><p>As more students use Learnwella, this section will grow into a verified wall of wins: scholarships found, internships applied for, jobs reached, sponsors connected, and projects funded. We will count real success only when students confirm it — because trust matters.</p><div class="impact-stats"><div><strong>{stats['opportunities']}</strong><span>opportunities currently listed</span></div><div><strong>{stats['projects']}</strong><span>student projects published</span></div><div><strong>{money(stats['pledged'])}</strong><span>pledges recorded for builders</span></div></div></div></section>'''
-    body = '''<section class="hero" id="hero"><div class="hero-bg-beyond" aria-hidden="true"></div><div class="hero-bg-now" aria-hidden="true"></div><div class="hero-content"><p class="eyebrow">Matched to your level. Built to launch.</p><h1>There's a version of your future<br>still waiting to be found.</h1><p class="subhead">Learnwella finds scholarships, internships, grants, and competitions built for where you stand — then gives you a secure workspace to build the projects that get you noticed, funded, or sold.</p><div class="hero-actions"><a href="/opportunities" class="cta-primary">See real open opportunities <span class="arrow">→</span></a><a href="/marketplace" class="cta-secondary">Fund or buy student projects</a></div><p class="hero-micro">Real listings, refreshed from trusted opportunity feeds.</p></div><div class="scroll-hint" aria-hidden="true"><span></span></div></section>''' + story_section + '''
+    story_section = f'''<section class="story-section"><div class="story-inner"><p class="eyebrow eyebrow-dark">The story 70Scholar is building</p><h2>A path for the student who almost gave up searching.</h2><p>70Scholar was created for students who keep asking, "Where are the scholarships, internships, competitions, sponsors, and people who will believe in my project?" The goal is to make answers easier to find, applications easier to prepare, and student projects easier to support.</p><p>As more students use 70Scholar, this section will grow into a verified wall of wins: scholarships found, internships applied for, jobs reached, sponsors connected, and projects funded. We will count real success only when students confirm it — because trust matters.</p><div class="impact-stats"><div><strong>{stats['opportunities']}</strong><span>opportunities currently listed</span></div><div><strong>{stats['projects']}</strong><span>student projects published</span></div><div><strong>{money(stats['pledged'])}</strong><span>pledges recorded for builders</span></div></div></div></section>'''
+    body = '''<section class="hero" id="hero"><div class="hero-bg-beyond" aria-hidden="true"></div><div class="hero-bg-now" aria-hidden="true"></div><div class="hero-content"><p class="eyebrow">Matched to your level. Built to launch.</p><h1>There's a version of your future<br>still waiting to be found.</h1><p class="subhead">70Scholar finds scholarships, internships, grants, and competitions built for where you stand — then gives you a secure workspace to build the projects that get you noticed, funded, or sold.</p><div class="hero-actions"><a href="/opportunities" class="cta-primary">See real open opportunities <span class="arrow">→</span></a><a href="/marketplace" class="cta-secondary">Fund or buy student projects</a></div><p class="hero-micro">Real listings, refreshed from trusted opportunity feeds.</p></div><div class="scroll-hint" aria-hidden="true"><span></span></div></section>''' + story_section + '''
 <section class="gap-section"><p class="eyebrow eyebrow-dark">Why most students miss out</p><p class="gap-statement">Most scholarships don't go unclaimed because nobody qualified. They go unclaimed because the right student never found them — or found them too late to build something strong.</p></section>
 <section class="journey-section" id="journey"><div class="journey-header"><p class="eyebrow">The path across</p><h2>Discover. Build. Launch. Fund.</h2></div><div class="journey-path"><div class="journey-step"><span class="step-number">01</span><h3>Discover</h3><p>Browse real openings and save the ones that fit your country, field, deadline, and level.</p></div><div class="journey-step"><span class="step-number">02</span><h3>Build</h3><p>Keep drafts, pitch text, links, files, and project details in your private account so unfinished work stays safe.</p></div><div class="journey-step"><span class="step-number">03</span><h3>Launch</h3><p>Publish a project to the marketplace, attach a demo or release file, and invite buyers, donors, mentors, or funders.</p></div></div></section>
 <section class="opportunities-section"><div class="opp-header"><p class="eyebrow eyebrow-dark">What's waiting on the other side</p><h2>Every door, sorted by which one actually opens for you.</h2></div><div class="opportunity-cards feature-cards"><div class="opp-card"><div class="icon-dot">🎓</div><h3>Scholarships</h3><p>Funding matched to your field, level, and country, with deadlines you can track.</p></div><div class="opp-card"><div class="icon-dot">💼</div><h3>Internships</h3><p>Roles sized for where you actually are in school, not five-year-experience traps.</p></div><div class="opp-card"><div class="icon-dot">🏆</div><h3>Competitions & grants</h3><p>Contests and small grants your project can realistically compete for.</p></div></div></section>
@@ -318,7 +318,7 @@ def render_auth(mode: str, msg: str = ""):
     return page_shell(title, body, None)
 
 def render_notice(title: str, message: str, user=None):
-    body = f"""<section class='auth-wrap'><div class='auth-card'><p class='eyebrow eyebrow-dark'>Learnwella</p><h1>{e(title)}</h1><p>{e(message)}</p><p class='muted'>In local development, emails are saved in <strong>mail_outbox.log</strong>.</p><div class='form-actions'><a class='cta-primary' href='/login'>Log in</a><a class='ghost-button' href='/'>Home</a></div></div></section>"""
+    body = f"""<section class='auth-wrap'><div class='auth-card'><p class='eyebrow eyebrow-dark'>70Scholar</p><h1>{e(title)}</h1><p>{e(message)}</p><p class='muted'>In local development, emails are saved in <strong>mail_outbox.log</strong>.</p><div class='form-actions'><a class='cta-primary' href='/login'>Log in</a><a class='ghost-button' href='/'>Home</a></div></div></section>"""
     return page_shell(title, body, user)
 
 def render_forgot_password(msg: str = ""):
@@ -419,10 +419,10 @@ def render_workspace(user, query):
         return "selected" if project and project["status"] == s else ("selected" if not project and s == "draft" else "")
     if project:
         asset_items = [f"<li><a href='/download?id={a['id']}'>{e(a['filename'])}</a><span>{a['size']//1024 + 1} KB</span></li>" for a in assets]
-        asset_box = f"""<div class="upload-box" data-project-id="{project['id']}" data-csrf="{e(user['csrf'])}"><h3>Upload project photos, videos, or release files</h3><p>Add images, videos, ZIP files, PDF pitch decks, program files, or app releases. Learnwella no longer adds an app upload limit for project files; your host/browser may still have practical limits.</p><input type="file" id="assetFile" accept="image/*,video/*,.zip,.pdf,.apk,.py,.js,.html,.css"><button class="ghost-button" type="button" id="uploadAsset">Upload file</button><p class="upload-status" id="uploadStatus"></p><ul class="clean-list asset-list">{''.join(asset_items) if asset_items else '<li>No uploaded files yet.</li>'}</ul></div>"""
+        asset_box = f"""<div class="upload-box" data-project-id="{project['id']}" data-csrf="{e(user['csrf'])}"><h3>Upload project photos, videos, or release files</h3><p>Add images, videos, ZIP files, PDF pitch decks, program files, or app releases. 70Scholar no longer adds an app upload limit for project files; your host/browser may still have practical limits.</p><input type="file" id="assetFile" accept="image/*,video/*,.zip,.pdf,.apk,.py,.js,.html,.css"><button class="ghost-button" type="button" id="uploadAsset">Upload file</button><p class="upload-status" id="uploadStatus"></p><ul class="clean-list asset-list">{''.join(asset_items) if asset_items else '<li>No uploaded files yet.</li>'}</ul></div>"""
     else:
-        asset_box = "<div class='upload-box'><h3>Upload project photos, videos, or release files</h3><p>Save the project once, then reopen it to attach photos, videos, and files. Learnwella does not add an app upload limit for project files.</p></div>"
-    body = f"""<section class="page-hero compact"><p class="eyebrow">Builder workspace</p><h1>Draft, save, upload, publish.</h1><p>This is the authenticated place where a student can leave and return later.</p></section><section class="workspace-grid"><aside class="project-sidebar"><a href="/workspace" class="cta-primary slim full">+ New project</a><div class="side-list">{''.join(side) if side else '<p class="empty">Your drafts will appear here.</p>'}</div></aside><div class="builder-panel"><form method="post" action="/project/save" class="builder-form"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><input type="hidden" name="project_id" value="{project['id'] if project else ''}"><div class="form-row"><label>Project title<input required name="title" value="{val('title')}" placeholder="Kinyarwanda Revision Cards App"></label><label>Category<input required name="category" value="{val('category')}" placeholder="AI, education, climate, fintech..."></label></div><label>Short summary<textarea required name="summary" rows="3" placeholder="Explain the problem, your solution, and who benefits.">{val('summary')}</textarea></label><label>Builder notes / pitch<textarea required name="details" rows="8" placeholder="Keep unfinished work here: milestones, pitch, application answers, budget, links, mentor feedback...">{val('details')}</textarea></label><p class="strong-description-note">Strong project descriptions should explain: problem, target users, your solution, current stage, what makes it different, how funding will be used, and what success looks like.</p><div class="form-row"><label>Funding goal (USD)<input type="number" min="0" step="1" name="goal_amount" value="{val('goal_amount','0') or '0'}"></label><label>Sale price / licence fee (USD)<input type="number" min="0" step="1" name="price" value="{val('price','0') or '0'}"></label></div><div class="form-row"><label>Demo URL<input name="demo_url" value="{val('demo_url')}" placeholder="https://..."></label><label>Code / project URL<input name="repo_url" value="{val('repo_url')}" placeholder="https://github.com/..."></label></div><div class="payout-section"><h3>Direct Mobile Money funding details</h3><p class="muted">Supporters will send money directly to the project creator. Learnwella does not send project money to the platform owner's account.</p><div class="form-row"><label>Mobile Money account name<input name="mobile_money_name" value="{val('mobile_money_name')}" placeholder="Account holder name"></label><label>Mobile Money number<input name="mobile_money_number" value="{val('mobile_money_number')}" placeholder="+250..."></label></div><div class="form-row"><label>Network<select name="mobile_money_network"><option value="" {'selected' if not project or not project['mobile_money_network'] else ''}>Choose network</option><option value="MTN Mobile Money" {'selected' if project and project['mobile_money_network']=='MTN Mobile Money' else ''}>MTN Mobile Money</option><option value="Airtel Money" {'selected' if project and project['mobile_money_network']=='Airtel Money' else ''}>Airtel Money</option><option value="Other" {'selected' if project and project['mobile_money_network']=='Other' else ''}>Other</option></select></label><label>Funding instructions<input name="payout_notes" value="{val('payout_notes')}" placeholder="Example: Include project title in payment note"></label></div></div><label>Visibility<select name="status"><option value="draft" {selected('draft')}>Private draft</option><option value="public" {selected('public') or selected('pending_review')}>Submit for marketplace review</option></select></label><p class="muted">New public projects go to admin moderation first. After approval, sponsors and students can see them in the marketplace.</p><div class="form-actions"><button class="cta-primary" type="submit">Save project</button><a class="cta-secondary dark" href="/marketplace">View marketplace</a></div></form>{asset_box}</div></section>"""
+        asset_box = "<div class='upload-box'><h3>Upload project photos, videos, or release files</h3><p>Save the project once, then reopen it to attach photos, videos, and files. 70Scholar does not add an app upload limit for project files.</p></div>"
+    body = f"""<section class="page-hero compact"><p class="eyebrow">Builder workspace</p><h1>Draft, save, upload, publish.</h1><p>This is the authenticated place where a student can leave and return later.</p></section><section class="workspace-grid"><aside class="project-sidebar"><a href="/workspace" class="cta-primary slim full">+ New project</a><div class="side-list">{''.join(side) if side else '<p class="empty">Your drafts will appear here.</p>'}</div></aside><div class="builder-panel"><form method="post" action="/project/save" class="builder-form"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><input type="hidden" name="project_id" value="{project['id'] if project else ''}"><div class="form-row"><label>Project title<input required name="title" value="{val('title')}" placeholder="Kinyarwanda Revision Cards App"></label><label>Category<input required name="category" value="{val('category')}" placeholder="AI, education, climate, fintech..."></label></div><label>Short summary<textarea required name="summary" rows="3" placeholder="Explain the problem, your solution, and who benefits.">{val('summary')}</textarea></label><label>Builder notes / pitch<textarea required name="details" rows="8" placeholder="Keep unfinished work here: milestones, pitch, application answers, budget, links, mentor feedback...">{val('details')}</textarea></label><p class="strong-description-note">Strong project descriptions should explain: problem, target users, your solution, current stage, what makes it different, how funding will be used, and what success looks like.</p><div class="form-row"><label>Funding goal (USD)<input type="number" min="0" step="1" name="goal_amount" value="{val('goal_amount','0') or '0'}"></label><label>Sale price / licence fee (USD)<input type="number" min="0" step="1" name="price" value="{val('price','0') or '0'}"></label></div><div class="form-row"><label>Demo URL<input name="demo_url" value="{val('demo_url')}" placeholder="https://..."></label><label>Code / project URL<input name="repo_url" value="{val('repo_url')}" placeholder="https://github.com/..."></label></div><div class="payout-section"><h3>Direct Mobile Money funding details</h3><p class="muted">Supporters will send money directly to the project creator. 70Scholar does not send project money to the platform owner's account.</p><div class="form-row"><label>Mobile Money account name<input name="mobile_money_name" value="{val('mobile_money_name')}" placeholder="Account holder name"></label><label>Mobile Money number<input name="mobile_money_number" value="{val('mobile_money_number')}" placeholder="+250..."></label></div><div class="form-row"><label>Network<select name="mobile_money_network"><option value="" {'selected' if not project or not project['mobile_money_network'] else ''}>Choose network</option><option value="MTN Mobile Money" {'selected' if project and project['mobile_money_network']=='MTN Mobile Money' else ''}>MTN Mobile Money</option><option value="Airtel Money" {'selected' if project and project['mobile_money_network']=='Airtel Money' else ''}>Airtel Money</option><option value="Other" {'selected' if project and project['mobile_money_network']=='Other' else ''}>Other</option></select></label><label>Funding instructions<input name="payout_notes" value="{val('payout_notes')}" placeholder="Example: Include project title in payment note"></label></div></div><label>Visibility<select name="status"><option value="draft" {selected('draft')}>Private draft</option><option value="public" {selected('public') or selected('pending_review')}>Submit for marketplace review</option></select></label><p class="muted">New public projects go to admin moderation first. After approval, sponsors and students can see them in the marketplace.</p><div class="form-actions"><button class="cta-primary" type="submit">Save project</button><a class="cta-secondary dark" href="/marketplace">View marketplace</a></div></form>{asset_box}</div></section>"""
     return page_shell("Workspace", body, user, "workspace")
 
 def public_projects(conn):
@@ -479,14 +479,14 @@ def render_project_detail(user, project_id):
     pledge_items = [f"<li><strong>{money(pl['amount'])}</strong> from {e(pl['name'])}<br><span>{e(pl['message'])}</span></li>" for pl in pledges]
     csrf = f"<input type='hidden' name='csrf' value='{e(user['csrf'])}'>" if user else ""
     login_note = "" if user else "<p class='muted'>You can pledge as a guest, or <a href='/login'>log in</a> to attach the pledge to your account.</p>"
-    link_row = (f"<a class='ghost-button' target='_blank' rel='noopener' href='{e(p['demo_url'])}'>Open demo ↗</a>" if p['demo_url'] else '') + (f"<a class='ghost-button' target='_blank' rel='noopener' href='{e(p['repo_url'])}'>Code / project link ↗</a>" if p['repo_url'] else '') + (f"<a class='ghost-button' href='mailto:{e(p['maker_email'])}?subject=Learnwella project: {quote(p['title'])}'>Contact maker</a>" if float(p['price'] or 0)>0 else '')
+    link_row = (f"<a class='ghost-button' target='_blank' rel='noopener' href='{e(p['demo_url'])}'>Open demo ↗</a>" if p['demo_url'] else '') + (f"<a class='ghost-button' target='_blank' rel='noopener' href='{e(p['repo_url'])}'>Code / project link ↗</a>" if p['repo_url'] else '') + (f"<a class='ghost-button' href='mailto:{e(p['maker_email'])}?subject=70Scholar project: {quote(p['title'])}'>Contact maker</a>" if float(p['price'] or 0)>0 else '')
     sale = f"<p class='sale-pill block'>Available for sale / licence: {money(p['price'])}</p>" if float(p['price'] or 0)>0 else ""
     payout_details = ""
     if p["mobile_money_number"]:
-        payout_details = f"<div class='momo-box'><h3>Creator Mobile Money</h3><p>Send support directly to the project creator, not to Learnwella.</p><dl><div><dt>Account name</dt><dd>{e(p['mobile_money_name'])}</dd></div><div><dt>Network</dt><dd>{e(p['mobile_money_network'])}</dd></div><div><dt>Number</dt><dd>{e(p['mobile_money_number'])}</dd></div></dl><p class='muted'>{e(p['payout_notes']) if p['payout_notes'] else 'Use the project title as your payment reference.'}</p></div>"
+        payout_details = f"<div class='momo-box'><h3>Creator Mobile Money</h3><p>Send support directly to the project creator, not to 70Scholar.</p><dl><div><dt>Account name</dt><dd>{e(p['mobile_money_name'])}</dd></div><div><dt>Network</dt><dd>{e(p['mobile_money_network'])}</dd></div><div><dt>Number</dt><dd>{e(p['mobile_money_number'])}</dd></div></dl><p class='muted'>{e(p['payout_notes']) if p['payout_notes'] else 'Use the project title as your payment reference.'}</p></div>"
     else:
         payout_details = "<div class='momo-box'><h3>Funding not activated</h3><p class='muted'>The creator has not added Mobile Money details yet.</p></div>"
-    body=f"""<section class="project-detail"><div class="project-main"><span class="tag">{e(p['category'])}</span><h1>{e(p['title'])}</h1><p class="provider">by {e(p['maker_name'])}</p><p class="lead">{e(p['summary'])}</p><div class="rich-text">{e(p['details']).replace(chr(10),'<br>')}</div>{media_gallery}<div class="link-row">{link_row}</div><h2>Project files</h2><ul class="clean-list asset-list">{''.join(asset_links) if asset_links else '<li>No public release file uploaded yet.</li>'}</ul>{message_form}</div><aside class="fund-card"><h2>Fund this project</h2><div class="progress big"><span style="width:{percent}%"></span></div><p class="progress-copy"><strong>{money(pledged)}</strong> pledged of {money(goal)} goal</p>{sale}<form method="post" action="/pledge" class="pledge-form">{csrf}<input type="hidden" name="project_id" value="{p['id']}"><label>Name<input required name="name" value="{e(user['name']) if user else ''}"></label><label>Email<input required type="email" name="email" value="{e(user['email']) if user else ''}"></label><label>Pledge amount (USD)<input required type="number" min="1" step="1" name="amount" value="25"></label><label>Message<textarea name="message" rows="3" placeholder="I want to support testing, mentorship, buying, or rollout..."></textarea></label><label>Funding option<select name="provider"><option value="momo">Show creator Mobile Money details</option><option value="pledge_only">Record pledge only</option></select></label>{payout_details}<button class="cta-primary full" type="submit">Record support</button>{login_note}<p class="muted">Learnwella does not collect this money. Sponsors send funds directly to the project creator's Mobile Money account and can use the pledge as proof/record.</p></form><h3>Recent support</h3><ul class="clean-list pledge-list">{''.join(pledge_items) if pledge_items else '<li>No pledges yet. Be the first.</li>'}</ul></aside></section>"""
+    body=f"""<section class="project-detail"><div class="project-main"><span class="tag">{e(p['category'])}</span><h1>{e(p['title'])}</h1><p class="provider">by {e(p['maker_name'])}</p><p class="lead">{e(p['summary'])}</p><div class="rich-text">{e(p['details']).replace(chr(10),'<br>')}</div>{media_gallery}<div class="link-row">{link_row}</div><h2>Project files</h2><ul class="clean-list asset-list">{''.join(asset_links) if asset_links else '<li>No public release file uploaded yet.</li>'}</ul>{message_form}</div><aside class="fund-card"><h2>Fund this project</h2><div class="progress big"><span style="width:{percent}%"></span></div><p class="progress-copy"><strong>{money(pledged)}</strong> pledged of {money(goal)} goal</p>{sale}<form method="post" action="/pledge" class="pledge-form">{csrf}<input type="hidden" name="project_id" value="{p['id']}"><label>Name<input required name="name" value="{e(user['name']) if user else ''}"></label><label>Email<input required type="email" name="email" value="{e(user['email']) if user else ''}"></label><label>Pledge amount (USD)<input required type="number" min="1" step="1" name="amount" value="25"></label><label>Message<textarea name="message" rows="3" placeholder="I want to support testing, mentorship, buying, or rollout..."></textarea></label><label>Funding option<select name="provider"><option value="momo">Show creator Mobile Money details</option><option value="pledge_only">Record pledge only</option></select></label>{payout_details}<button class="cta-primary full" type="submit">Record support</button>{login_note}<p class="muted">70Scholar does not collect this money. Sponsors send funds directly to the project creator's Mobile Money account and can use the pledge as proof/record.</p></form><h3>Recent support</h3><ul class="clean-list pledge-list">{''.join(pledge_items) if pledge_items else '<li>No pledges yet. Be the first.</li>'}</ul></aside></section>"""
     return page_shell(p["title"], body, user, "marketplace")
 
 
@@ -529,7 +529,7 @@ def sync_opportunities_from_feeds() -> tuple[int, str]:
     with db() as conn:
         for source in RSS_SOURCES:
             try:
-                req = urllib.request.Request(source, headers={"User-Agent":"LearnwellaBot/1.0"})
+                req = urllib.request.Request(source, headers={"User-Agent":"70ScholarBot/1.0"})
                 data = urllib.request.urlopen(req, timeout=8).read()
                 root = ET.fromstring(data)
                 items = root.findall(".//item")[:12]
@@ -582,7 +582,7 @@ def render_admin(user, msg=""):
     log_rows = ''.join([f"<li><strong>{e(l['imported'])}</strong> imported from {e(l['source'])}<br><span>{e(l['message'])}</span></li>" for l in logs])
     pledge_rows = ''.join([f"<li><strong>{money(p['amount'])}</strong> for {e(p['title'])}<br><span>{e(p['name'])} · {e(p['status'])}</span></li>" for p in pledges])
     body=f"""
-    <section class='page-hero compact admin-hero'><p class='eyebrow'>Admin command center</p><h1>Manage users, opportunities, moderation, and growth.</h1><p>Review marketplace submissions, manage roles, import opportunities, and keep Learnwella safe.</p></section>
+    <section class='page-hero compact admin-hero'><p class='eyebrow'>Admin command center</p><h1>Manage users, opportunities, moderation, and growth.</h1><p>Review marketplace submissions, manage roles, import opportunities, and keep 70Scholar safe.</p></section>
     <section class='admin-grid'>
       <div class='stats-row'>{cards}</div>
       {flash(msg,'success') if msg else ''}
@@ -604,12 +604,12 @@ def render_payment_setup(user, pledge, provider, checkout_url=""):
     if provider == 'momo':
         instructions = f"Send {money(pledge['amount'])} directly to {pledge['mobile_money_name']} on {pledge['mobile_money_network']} using number {pledge['mobile_money_number']}. Reference: {ref}. {pledge['payout_notes'] or 'Use the project title in the payment note.'}"
     else:
-        instructions = "This provider is disabled for now. Learnwella is configured for direct creator Mobile Money funding so money does not go to the platform owner."
+        instructions = "This provider is disabled for now. 70Scholar is configured for direct creator Mobile Money funding so money does not go to the platform owner."
     body = f"""<section class='auth-wrap'><div class='auth-card payment-card'><p class='eyebrow eyebrow-dark'>Direct creator payment</p><h1>{e(provider.title())} support</h1><p>You recorded a pledge of <strong>{money(pledge['amount'])}</strong> for <strong>{e(pledge['title'])}</strong>.</p><p class='muted'>Reference: <strong>{e(ref)}</strong></p><div class='rich-text'>{e(instructions)}</div><a class='cta-primary full' href='/payment/success?pledge_id={pledge['id']}'>I have sent it / mark paid in demo</a><a class='ghost-button full' href='/project?id={pledge['project_id']}'>Back to project</a></div></section>"""
     return page_shell("Payment setup", body, user)
 
-class LearnwellaHandler(BaseHTTPRequestHandler):
-    server_version = "LearnwellaMVP/1.0"
+class ScholarHandler(BaseHTTPRequestHandler):
+    server_version = "70ScholarMVP/1.0"
     def log_message(self, fmt, *args): sys.stderr.write("[%s] %s\n" % (self.log_date_time_string(), fmt % args))
     def parse_cookies(self):
         c = cookies.SimpleCookie(); raw = self.headers.get("Cookie")
@@ -662,7 +662,7 @@ class LearnwellaHandler(BaseHTTPRequestHandler):
         parsed=urlparse(self.path); path=parsed.path; query=parse_qs(parsed.query); user=self.current_user()
         if path == "/robots.txt": return self.send_plain("User-agent: *\nAllow: /\nSitemap: /sitemap.xml\n", "text/plain")
         if path == "/sitemap.xml": return self.send_plain(self.build_sitemap(), "application/xml")
-        if path == "/version": return self.send_plain(f"Learnwella {APP_VERSION} - full app restored, static assets included, Render-ready", "text/plain")
+        if path == "/version": return self.send_plain(f"70Scholar {APP_VERSION} - full app restored, static assets included, Render-ready", "text/plain")
         if path.startswith("/uploads/profiles/"): return self.serve_profile_upload(path)
         if path.startswith("/static/"): return self.serve_static(path)
         if path == "/download": return self.serve_download(query, user)
@@ -1048,5 +1048,5 @@ class LearnwellaHandler(BaseHTTPRequestHandler):
         return self.send_json({"ok":True,"download_url":f"/download?id={cur.lastrowid}","filename":filename})
 
 def main():
-    init_db(); httpd=ThreadingHTTPServer((HOST, PORT), LearnwellaHandler); print(f"Learnwella running at http://{HOST}:{PORT}", flush=True); httpd.serve_forever()
+    init_db(); httpd=ThreadingHTTPServer((HOST, PORT), ScholarHandler); print(f"70Scholar running at http://{HOST}:{PORT}", flush=True); httpd.serve_forever()
 if __name__ == "__main__": main()

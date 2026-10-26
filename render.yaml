@@ -1,6 +1,9 @@
-# Render Blueprint for Learnwella.
+# Render Blueprint for 70Scholar.
 # One-click deploy: https://render.com/deploy?repo=https://github.com/Mukunzi7/My-Website
 # Secrets use "sync: false" so Render prompts for them instead of storing them in Git.
+# NOTE: "learnwella" below is the Render SERVICE identifier / free host name, not the
+# brand. Keep it in sync with the name shown in your Render Blueprint; changing it
+# after creation makes Render try to create a second service. The brand is 70Scholar.
 services:
   - type: web
     name: learnwella
@@ -47,7 +50,7 @@ services:
 #
 # and add these to envVars above:
 #      - key: DB_PATH
-#        value: /var/data/learnwella.sqlite3
+#        value: /var/data/70scholar.sqlite3
 #      - key: UPLOAD_DIR
 #        value: /var/data/uploads
 #

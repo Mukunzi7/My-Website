@@ -51,15 +51,15 @@ BIRD_REGION=us1
 
 Usually you do not need to set `PORT` manually because Render provides it. If asked, use `10000`.
 
-## v12 deployment gotchas
+## v13 deployment gotchas
 
-1. **Push the restored `server.py`.** Older commits on `main` contain a truncated 57-line file
-   that imports but serves nothing. Confirm locally with `python3 -m py_compile server.py` and
+1. **Deploy current `main`.** Older commits contained a truncated 57-line `server.py`
+   that imports but serves nothing; the current file is complete. Confirm locally with `python3 -m py_compile server.py` and
    by opening `/version`.
 2. **Push the `static/` folder.** `/static/styles.css` and `/static/app.js` must return 200;
    otherwise the site loads unstyled.
 3. **Check `/version` after deploy.** It must say
-   `Learnwella v12-learnwella-brand-static-render ...`.
+   `70Scholar v13-70scholar-brand ...`.
 
 ## After updating GitHub
 

@@ -1,6 +1,6 @@
-# Learnwella Email Verification and Password Reset
+# 70Scholar Email Verification and Password Reset
 
-Learnwella now includes production-style account security flows:
+70Scholar now includes production-style account security flows:
 
 - Email verification after signup
 - Login blocked until email is verified
@@ -10,7 +10,7 @@ Learnwella now includes production-style account security flows:
 
 ## Local development
 
-If SMTP is not configured, Learnwella writes emails to:
+If SMTP is not configured, 70Scholar writes emails to:
 
 ```text
 mail_outbox.log
@@ -57,7 +57,7 @@ Recommended email providers:
 
 ## Bird / MessageBird email option
 
-Learnwella now supports Bird email as the first email provider. If `BIRD_API_KEY` is set, Learnwella sends verification and password-reset emails through Bird. If it is not set, Learnwella falls back to SMTP, then to `mail_outbox.log` in local development.
+70Scholar now supports Bird email as the first email provider. If `BIRD_API_KEY` is set, 70Scholar sends verification and password-reset emails through Bird. If it is not set, 70Scholar falls back to SMTP, then to `mail_outbox.log` in local development.
 
 Set these environment variables:
 

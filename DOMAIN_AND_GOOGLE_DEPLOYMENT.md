@@ -1,17 +1,17 @@
-# Domains, Google Search, and deployment for Learnwella
+# Domains, Google Search, and deployment for 70Scholar
 
 ## 1. Choosing a domain
 
-The brand is **Learnwella** (see `BRAND_RENAME.md`). Check availability and trademarks for
+The brand is **70Scholar** (see `BRAND_RENAME.md`). Check availability and trademarks for
 names like:
 
 ```text
-learnwella.com
-learnwella.app
-learnwella.rw
-learnwella.co
-learnwella.africa
-learnwella.org
+70scholar.com
+70scholar.app
+70scholar.rw
+70scholar.co
+70scholar.africa
+70scholar.org
 ```
 
 You do not need a domain to start. Deploy to Render first and use the free URL
@@ -28,15 +28,15 @@ verification emails and `sitemap.xml` are generated from it.
 
 ## 3. Connecting a custom domain on Render
 
-1. Render dashboard → your `learnwella` service → **Settings** → **Custom Domains**.
-2. Click **Add Custom Domain** and enter e.g. `www.learnwella.com`.
+1. Render dashboard → your `70scholar` service → **Settings** → **Custom Domains**.
+2. Click **Add Custom Domain** and enter e.g. `www.70scholar.com`.
 3. Render shows the DNS records to add at your registrar:
    - usually a **CNAME** for `www` pointing at `<your-service>.onrender.com`
    - and/or an **A record** for the apex domain
 4. Add the records, wait for DNS propagation (minutes to a few hours), then click **Verify**.
 5. Render provisions a free Let's Encrypt TLS certificate automatically. Always force HTTPS.
-6. Update `APP_BASE_URL=https://www.learnwella.com` in Environment and redeploy.
-7. Open `https://www.learnwella.com/sitemap.xml` — URLs must now use your real domain.
+6. Update `APP_BASE_URL=https://www.70scholar.com` in Environment and redeploy.
+7. Open `https://www.70scholar.com/sitemap.xml` — URLs must now use your real domain.
 
 ---
 
@@ -48,11 +48,11 @@ verification emails and `sitemap.xml` are generated from it.
 3. Submit the sitemap:
 
    ```text
-   https://www.learnwella.com/sitemap.xml
+   https://www.70scholar.com/sitemap.xml
    ```
 
 4. Use **URL Inspection → Request Indexing** for the homepage.
-5. Learnwella already serves:
+5. 70Scholar already serves:
 
    ```text
    /robots.txt
@@ -69,7 +69,7 @@ indexing private routes such as `/dashboard`, `/workspace`, `/admin`, `/account`
 ## 5. Google Cloud Run alternative
 
 ```bash
-gcloud run deploy learnwella \
+gcloud run deploy 70scholar \
   --source . \
   --region europe-west1 \
   --allow-unauthenticated \
@@ -88,7 +88,7 @@ Cloud Run → **Manage Custom Domains** → add and verify your domain → updat
 git clone https://github.com/Mukunzi7/My-Website.git
 cd My-Website
 git add .
-git commit -m "Update Learnwella"
+git commit -m "Update 70Scholar"
 git push origin main
 ```
 

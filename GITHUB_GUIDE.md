@@ -1,4 +1,4 @@
-# GitHub guide for Learnwella
+# GitHub guide for 70Scholar
 
 Repository: **<https://github.com/Mukunzi7/My-Website>** (public, branch `main`).
 
@@ -22,16 +22,16 @@ git push origin main
 Render has **Auto-Deploy** enabled by default, so a push to `main` triggers a new deployment.
 Confirm the new build at `https://<your-service>.onrender.com/version`.
 
-## Applying the v12 changes supplied by an agent
+## Applying a supplied bundle or diff (if you ever need to)
 
 ```bash
 # Option 1 — bundle (exact commit, most robust)
-git pull /path/to/My-Website-v12.bundle main
+git pull /path/to/My-Website-v13.bundle main
 
 # Option 2 — plain diff
-git apply --binary /path/to/v12-full.diff
+git apply --binary /path/to/v13-full.diff
 git add -A
-git commit -m "v12: restore app, add styling, align brand"
+git commit -m "Update 70Scholar"
 
 git push origin main
 ```
@@ -46,7 +46,7 @@ Never commit:
 - anything inside `uploads/` (user files)
 
 `.gitignore` already excludes these. Both `edubridge.sqlite3` and `mail_outbox.log` were
-removed from version control in v12 because they had been committed with real user data —
+removed from version control in v13 because they had been committed with real user data —
 if a secret was ever pushed, rotate it.
 
 ## Before you deploy

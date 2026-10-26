@@ -1,6 +1,6 @@
-# Learnwella — Platform MVP v12
+# 70Scholar — Platform MVP v13
 
-**Learnwella** (formerly EduBridge) is a full-stack platform by **Nexus Company Ltd** for
+**70Scholar** (previously Learnwella, originally EduBridge) is a full-stack platform by **Nexus Company Ltd** for
 opportunity discovery, student project building, sponsor conversations, project showcases,
 marketplace funding, direct Mobile Money support, and admin moderation.
 
@@ -28,20 +28,24 @@ with a small progressive-enhancement script in `static/app.js`.
 
 ---
 
-## v12 changes
+## v13 changes
 
-1. **Restored the full app.** Commit `0c111b6` accidentally truncated `server.py` to 57 lines.
-   All ~1,000 lines of routes, rendering and handlers are back.
-2. **Added the missing front end.** `static/styles.css` and `static/app.js` were referenced by
-   every page but had never been committed; both now exist and are tracked.
-3. **Aligned the brand on Learnwella** across code, emails, docs, config files, and pitch deck.
-4. **Added `DB_PATH` and `UPLOAD_DIR` environment variables** so SQLite and uploads can live on a
-   persistent Render Disk instead of the ephemeral container filesystem.
-5. **Bumped `APP_VERSION` to `v12-learnwella-brand-static-render`** so you can verify a deployment
-   at `/version` and browser caches pick up the new CSS/JS.
-6. **Removed committed runtime data** (`edubridge.sqlite3`, `mail_outbox.log`) from Git and
-   replaced the real default admin password in `.env.example` with a placeholder.
-7. **Added `RENDER_DEPLOY.md`** with a one-click deploy path and a production checklist.
+1. **Renamed the platform to 70Scholar** — page titles, SVG wordmark, footer, page copy,
+   verification and password-reset emails, `/version`, the pitch deck, and all documentation.
+2. **Bumped `APP_VERSION` to `v13-70scholar-brand`** so `/version` proves which build is live
+   and browser caches pick up the new CSS/JS.
+3. **Kept the Render service identifier `learnwella`** in `render.yaml` on purpose — it is the
+   free host name (`https://learnwella.onrender.com`), not the brand. Add a custom domain such
+   as `70scholar.com` when you are ready (see `DOMAIN_AND_GOOGLE_DEPLOYMENT.md`).
+
+### Earlier v12 fixes (already included)
+
+- Restored the full 1,052-line `server.py` after commit `0c111b6` truncated it to 57 lines.
+- Added the missing `static/styles.css` and `static/app.js` (previously every page 404'd them).
+- Added `DB_PATH` / `UPLOAD_DIR` env vars so SQLite and uploads can live on a Render Disk.
+- Removed committed runtime data (`edubridge.sqlite3`, `mail_outbox.log`) from Git and
+  replaced the real default admin password in `.env.example` with a placeholder.
+- Added `RENDER_DEPLOY.md` and the `render.yaml` Blueprint.
 
 Legacy internal identifiers `edubridge.sqlite3` (default DB filename) and
 `edubridge_session` (cookie name) are intentionally kept so existing databases and sessions
@@ -63,14 +67,14 @@ opportunities and projects on first start.
 To use a different port or storage location:
 
 ```bash
-PORT=8080 DB_PATH=/tmp/learnwella.sqlite3 UPLOAD_DIR=/tmp/learnwella-uploads python3 server.py
+PORT=8080 DB_PATH=/tmp/70scholar.sqlite3 UPLOAD_DIR=/tmp/70scholar-uploads python3 server.py
 ```
 
 Verify what is running:
 
 ```text
 http://127.0.0.1:8080/version
-→ Learnwella v12-learnwella-brand-static-render - full app restored, static assets included, Render-ready
+→ 70Scholar v13-70scholar-brand - full app restored, static assets included, Render-ready
 ```
 
 ---
@@ -89,7 +93,7 @@ Copy `.env.example` and set the values in your host's dashboard (never commit re
 | `BIRD_API_KEY` | strongly recommended | Without email, new users cannot verify their address or log in |
 | `BIRD_FROM`, `BIRD_REGION` | with Bird | Sender address and `us1`/`eu1` |
 | `SMTP_*` | alternative | Used if Bird is not configured |
-| `DB_PATH` | with a Render Disk | e.g. `/var/data/learnwella.sqlite3` |
+| `DB_PATH` | with a Render Disk | e.g. `/var/data/70scholar.sqlite3` |
 | `UPLOAD_DIR` | with a Render Disk | e.g. `/var/data/uploads` |
 | `CLOUDINARY_*` | optional | Offloads project uploads to Cloudinary |
 | `MAX_UPLOAD_BYTES` | optional | `0` = no app-level limit; profile photos are capped at 10 MB |
@@ -139,7 +143,7 @@ later does not reset an already-created account, so choose it carefully.
 ## Direct Mobile Money funding
 
 Each creator adds their own Mobile Money details in the workspace before submitting a project
-for review. Sponsors send funds directly to the creator; Learnwella records the pledge/support
+for review. Sponsors send funds directly to the creator; 70Scholar records the pledge/support
 activity but never collects the money. See `PAYMENTS.md`.
 
 ---

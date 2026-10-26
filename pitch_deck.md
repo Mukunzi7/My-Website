@@ -1,8 +1,8 @@
-# Learnwella Startup Pitch Deck
+# 70Scholar Startup Pitch Deck
 
 ## 1. Title
 
-**Learnwella**  
+**70Scholar**  
 There's a version of your future still waiting to be found.
 
 A discovery, builder, funding, and marketplace platform for students and young builders.
@@ -22,7 +22,7 @@ Even when students find an opportunity, they often lack a place to build a stron
 
 ## 4. Solution
 
-Learnwella helps students:
+70Scholar helps students:
 
 1. Discover real opportunities matched to level, field, country, and deadline.
 2. Save and track opportunities inside an account.
@@ -66,7 +66,7 @@ Secondary users:
 
 ## 7. Market Opportunity
 
-Learnwella starts with African students and expands globally.
+70Scholar starts with African students and expands globally.
 
 Initial beachhead:
 
@@ -96,7 +96,7 @@ Potential revenue streams:
 
 ## 9. Competitive Advantage
 
-Learnwella is not only an opportunity list.
+70Scholar is not only an opportunity list.
 
 It combines:
 
@@ -130,7 +130,7 @@ Phase 3: Regional expansion
 
 ## 11. Impact
 
-Learnwella can help students:
+70Scholar can help students:
 
 - Find scholarships before deadlines.
 - Build stronger portfolios.
@@ -164,7 +164,7 @@ Next:
 
 ## 13. Ask
 
-Learnwella is looking for:
+70Scholar is looking for:
 
 - Pilot schools and universities
 - Youth-focused funders

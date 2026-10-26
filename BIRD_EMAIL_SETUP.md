@@ -1,6 +1,6 @@
-# Bird / MessageBird Email Setup for Learnwella
+# Bird / MessageBird Email Setup for 70Scholar
 
-Learnwella now supports Bird email for:
+70Scholar now supports Bird email for:
 
 - Email verification
 - Password reset emails
@@ -44,7 +44,7 @@ If your key starts with `bk_eu1_`, use:
 BIRD_REGION=eu1
 ```
 
-Learnwella can auto-detect `us1` or `eu1` from the key prefix, so `BIRD_REGION` is optional.
+70Scholar can auto-detect `us1` or `eu1` from the key prefix, so `BIRD_REGION` is optional.
 
 ## How it works in the Python app
 

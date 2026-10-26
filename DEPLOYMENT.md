@@ -1,4 +1,4 @@
-# Learnwella deployment overview
+# 70Scholar deployment overview
 
 **For Render (recommended), read `RENDER_DEPLOY.md` first.** It has a one-click Blueprint link,
 the exact environment variables, persistent storage, and a custom-domain checklist.
@@ -56,7 +56,7 @@ One-click: <https://render.com/deploy?repo=https://github.com/Mukunzi7/My-Websit
 ## Google Cloud Run
 
 ```bash
-gcloud run deploy learnwella \
+gcloud run deploy 70scholar \
   --source . \
   --region europe-west1 \
   --allow-unauthenticated \
@@ -72,7 +72,7 @@ gcloud run deploy learnwella \
 ## Docker (local or any host)
 
 ```bash
-docker build -t learnwella .
+docker build -t 70scholar .
 docker run -p 8080:10000 \
   -e HOST=0.0.0.0 \
   -e PORT=10000 \
@@ -80,9 +80,9 @@ docker run -p 8080:10000 \
   -e ADMIN_EMAIL=you@example.com \
   -e ADMIN_PASSWORD='ChangeThisStrongPassword123!' \
   -v "$PWD/data:/var/data" \
-  -e DB_PATH=/var/data/learnwella.sqlite3 \
+  -e DB_PATH=/var/data/70scholar.sqlite3 \
   -e UPLOAD_DIR=/var/data/uploads \
-  learnwella
+  70scholar
 ```
 
 The Dockerfile exposes `10000` by default; override `PORT` if your host expects `8080`.
@@ -94,8 +94,8 @@ The Dockerfile exposes `10000` by default; override `PORT` if your host expects 
 `fly.toml` sets `PORT=8080` and mounts nothing by default. Before a real launch:
 
 ```bash
-fly volumes create learnwella_data --size 1 --region jnb
-# add a [mounts] section, then set DB_PATH=/data/learnwella.sqlite3 and UPLOAD_DIR=/data/uploads
+fly volumes create 70scholar_data --size 1 --region jnb
+# add a [mounts] section, then set DB_PATH=/data/70scholar.sqlite3 and UPLOAD_DIR=/data/uploads
 fly secrets set ADMIN_PASSWORD=... BIRD_API_KEY=... APP_BASE_URL=https://your-app.fly.dev
 fly deploy
 ```
@@ -104,7 +104,7 @@ fly deploy
 
 ## Production checklist
 
-1. Push the v12 code (the older `main` contained a truncated `server.py`).
+1. Confirm the current v13 code is on `main` (older commits had a truncated `server.py`).
 2. Set `ADMIN_PASSWORD`, `APP_BASE_URL`, and an email provider before the first boot.
 3. Verify `/version`, `/static/styles.css`, `/static/app.js`, `/robots.txt`, `/sitemap.xml`.
 4. Add persistent storage for SQLite and uploads, or migrate to PostgreSQL + cloud files.
@@ -116,6 +116,6 @@ fly deploy
 
 ## Direct Mobile Money funding
 
-Learnwella uses direct creator Mobile Money funding. Each project creator enters their own
+70Scholar uses direct creator Mobile Money funding. Each project creator enters their own
 Mobile Money details before publishing; sponsors send money to the creator, not to the platform
 owner. See `PAYMENTS.md`.

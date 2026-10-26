@@ -1,2 +1,2 @@
-# Learnwella currently uses only the Python standard library.
+# 70Scholar currently uses only the Python standard library.
 # Leave this file for Render/Railway/PaaS compatibility.

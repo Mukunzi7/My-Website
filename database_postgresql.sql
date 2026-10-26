@@ -1,4 +1,4 @@
--- Learnwella PostgreSQL production schema
+-- 70Scholar PostgreSQL production schema
 -- Run this in a PostgreSQL database before migrating production data.
 
 CREATE TABLE IF NOT EXISTS users (

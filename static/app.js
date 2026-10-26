@@ -1,4 +1,4 @@
-/* Learnwella — progressive-enhancement front end.
+/* 70Scholar — progressive-enhancement front end.
    The whole site is server-rendered; this file only adds the two AJAX uploads
    plus small quality-of-life behaviours. Every block is guarded so a missing
    element on any page is harmless. */
