@@ -26,10 +26,10 @@ Confirm the new build at `https://seven0scholar-7cjc.onrender.com/version`.
 
 ```bash
 # Option 1 — bundle (exact commit, most robust)
-git pull /path/to/My-Website-v15.bundle main
+git pull /path/to/My-Website-v16.bundle main
 
 # Option 2 — plain diff
-git apply --binary /path/to/v15-full.diff
+git apply --binary /path/to/v16-full.diff
 git add -A
 git commit -m "Update 70Scholar"
 
