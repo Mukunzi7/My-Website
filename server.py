@@ -310,7 +310,7 @@ HOMEPAGE_PHOTOS = [
     {"file": "education-leader.jpg", "alt": "An education leader speaking with a student in a classroom",
      "caption": "Education leadership & students", "note": "Leaders who listen to learners"},
     {"file": "focused-scholar.jpg", "alt": "A focused scholar holding books on a university campus",
-     "caption": "Focused scholars", "note": "Every opportunity starts here"},
+     "caption": "Focused scholars", "note": "Every opportunity starts here", "w": 1200, "h": 1800},
     {"file": "graduation.jpg", "alt": "Graduates celebrating at a university ceremony",
      "caption": "Graduation day", "note": "Where the path leads"},
 ]
@@ -319,7 +319,7 @@ def render_photo_gallery() -> str:
     cards = "".join([
         f"""<figure class="gallery-card">
           <img src="/static/images/{e(photo['file'])}?v={APP_VERSION}" alt="{e(photo['alt'])}"
-               loading="lazy" decoding="async" width="1200" height="800">
+               loading="lazy" decoding="async" width="{photo.get('w', 1200)}" height="{photo.get('h', 800)}">
           <figcaption><strong>{e(photo['caption'])}</strong><span>{e(photo['note'])}</span></figcaption>
         </figure>""" for photo in HOMEPAGE_PHOTOS
     ])
