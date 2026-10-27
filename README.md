@@ -1,4 +1,4 @@
-# 70Scholar — Platform MVP v16
+# 70Scholar — Platform MVP v17
 
 **70Scholar** (previously Learnwella, originally EduBridge) is a full-stack platform by **Nexus Company Ltd** for
 opportunity discovery, student project building, sponsor conversations, project showcases,
@@ -47,7 +47,21 @@ required environment variables, persistent storage, and custom-domain setup.
 
 ---
 
-## v16 changes
+## v17 changes
+
+- **Public Programs page** (`/programs`) with 16 official YYAS/YYGS/RSI/MITES/SSP/Simons/QuestBridge/Mastercard/ALA/Chevening/Rhodes/Fulbright/Gates Cambridge/Erasmus Mundus/DAAD programme links.
+- **Add opportunity by link**: paste a URL, fetch a safe preview, and let the admin edit and approve before publication.
+- **Profile picture** in the top-right navigation, with a default avatar and Account uploads.
+- **New signup fields**: optional account type, career/field and education level; only name, email and password are required.
+- **Classic long-scroll homepage** with a clearer story flow and a featured-programs band.
+- **Helpline** `0726495648` and `honoremukunzi6@gmail.com` in every page footer.
+- **Reorganized admin** with a sidebar and four numbered work areas.
+- **Resilient signups**: auto-verification when no working email provider is configured.
+- **Automated tests** in `tests/test_v17.py`.
+
+Full guide: **[FEATURES.md](FEATURES.md)**.
+
+## v16 changes (history)
 
 - **Real logo** (`static/images/logo.svg` + favicon). See `LOGO.md` to replace it.
 - **Sign-in gate** on everything except the homepage and auth pages, with `?next=` return.
@@ -75,14 +89,14 @@ Full guide: **[FEATURES.md](FEATURES.md)**.
 3. **7-photo homepage gallery** — real (non-AI) student/scholar photographs in
    `static/images/`, with captions, lazy loading, and responsive layout. Sources and
    replacement instructions are in `PHOTOS.md`.
-4. **`APP_VERSION` bumped to `v16-features`** for cache-busting and `/version`
+4. **`APP_VERSION` bumped to `v14-brand`** for cache-busting and `/version`
    checks.
 
 ## v13 changes
 
 1. **Renamed the platform to 70Scholar** — page titles, SVG wordmark, footer, page copy,
    verification and password-reset emails, `/version`, the pitch deck, and all documentation.
-2. **Bumped `APP_VERSION` to `v16-features`** so `/version` proves which build is live
+2. **Bumped `APP_VERSION` to `v13-70scholar-brand`** so `/version` proved which build was live
    and browser caches pick up the new CSS/JS.
 3. **Renamed the Render service to `70scholar`** in `render.yaml`, so the free URL is
    `https://seven0scholar-7cjc.onrender.com`. This requires starting a fresh Blueprint flow; see
@@ -124,7 +138,7 @@ Verify what is running:
 
 ```text
 http://127.0.0.1:8080/version
-→ 70Scholar v16-features - bigger brand, single-owner admin, NESA photo gallery
+→ 70Scholar v17-programs - featured programs, link previews, organized admin
 ```
 
 ---
@@ -224,7 +238,7 @@ activity but never collects the money. See `PAYMENTS.md`.
 | `WINDOWS_UPDATE_GUIDE.md` | Checking versions on Windows |
 | `BRAND_RENAME.md` | Brand decision record |
 | `PHOTOS.md` | Homepage gallery photo sources, licences, and how to replace images |
-| `FEATURES.md` | v16 feature guide (gate, auto-import, courses, slideshow, submissions, fee) |
+| `FEATURES.md` | v17 feature guide (programs, link previews, organized admin, tests) |
 | `LOGO.md` | How to replace or recolour the logo |
 
 ---

@@ -4,14 +4,15 @@ Run: python3 server.py  then open http://127.0.0.1:8080
 No external Python packages required.
 """
 from __future__ import annotations
-import base64, hashlib, html, json, mimetypes, os, re, secrets, sqlite3, sys, smtplib, threading, time, urllib.request, xml.etree.ElementTree as ET
+import base64, hashlib, html, json, ipaddress, mimetypes, os, re, secrets, socket, sqlite3, sys, smtplib, threading, time, urllib.request, xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from email.message import EmailMessage
+from contextlib import contextmanager
 from typing import Any
-from urllib.parse import parse_qs, quote, unquote, urlparse, urlencode
+from urllib.parse import parse_qs, quote, unquote, urlparse, urlencode, urljoin
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("DB_PATH", str(ROOT / "edubridge.sqlite3")))
@@ -20,7 +21,7 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 APP_NAME = "70Scholar"
-APP_VERSION = "v16-features"
+APP_VERSION = "v17-programs"
 COMPANY_NAME = "Nexus Company Ltd"
 APP_TAGLINE = "Find the opportunity. Show the build. Start the conversation."
 OWNER_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "honoremukunzi6@gmail.com").strip().lower()
@@ -53,8 +54,28 @@ TYPEWRITER_WORDS = [
 AUTO_SYNC_INTERVAL_SECONDS = 1800
 # Pages reachable without an account. Everything else requires sign-in.
 PUBLIC_GET_PATHS = {"/", "/login", "/signup", "/verify-email", "/forgot-password",
-                    "/reset-password", "/robots.txt", "/sitemap.xml", "/version"}
+                    "/reset-password", "/programs", "/robots.txt", "/sitemap.xml", "/version"}
 PUBLIC_POST_PATHS = {"/login", "/signup", "/forgot-password", "/reset-password"}
+ACCOUNT_TYPES = ["Student", "Parent / Guardian", "Teacher / Mentor", "Employer / Organisation", "Other"]
+FEATURED_PROGRAMS = [
+ {"title":"Yale Young African Scholars (YYAS) 2027","type":"Summer program","provider":"Yale University","country":"Africa / online + Rwanda","level":"African secondary students aged 14-18 in grades 10-11","deadline":"2027-01-20","url":"https://africanscholars.yale.edu/admissions","summary":"Tuition-free university prep and leadership programme for African secondary school students. Includes a 6-day online college-prep workshop and a 9-day residential leadership summit in Rwanda.","tags":"YYAS, Yale, Africa, Rwanda, leadership, free"},
+ {"title":"Yale Young Global Scholars (YYGS) 2027","type":"Summer program","provider":"Yale University","country":"USA / global","level":"High school sophomores and juniors aged 16-18","deadline":"2027-01-20","url":"https://globalscholars.yale.edu/","summary":"Two-week residential academic programme at Yale for students worldwide, with need-based financial aid up to full tuition.","tags":"YYGS, Yale, global, summer, financial aid"},
+ {"title":"Research Science Institute (RSI) 2027","type":"Research program","provider":"Center for Excellence in Education, MIT & Stanford","country":"USA","level":"High school juniors (rising seniors), 16+","deadline":"2026-12-11","url":"https://www.cee.org/programs/research-science-institute","summary":"Six-week, cost-free research programme at MIT and Stanford for the world's top STEM students. ~100 scholars selected from 3,000+ applicants.","tags":"RSI, MIT, Stanford, research, STEM, free"},
+ {"title":"MITES Summer (MIT)","type":"Summer program","provider":"Massachusetts Institute of Technology","country":"USA","level":"US grade 11 students","deadline":"2027-02-01","url":"https://mites.mit.edu/discover-mites/mites-summer/","summary":"Free six-week residential STEM enrichment at MIT for high school juniors from underrepresented and underserved communities.","tags":"MIT, MITES, STEM, free, US"},
+ {"title":"Summer Science Program (SSP)","type":"Research program","provider":"SSP International","country":"USA","level":"High school juniors aged 15-19","deadline":"2027-02-01","url":"https://ssp.org/","summary":"Five-week residential research in astrophysics, biochemistry, genomics or synthetic chemistry. Co-sponsored by MIT.","tags":"SSP, research, astrophysics, genomics"},
+ {"title":"Simons Summer Research Program","type":"Research program","provider":"Stony Brook University","country":"USA","level":"High school juniors, 16+, school nomination required","deadline":"2027-02-05","url":"https://www.stonybrook.edu/simons/","summary":"Six-week mentored research in science, maths or engineering with Stony Brook faculty, ending in a research poster.","tags":"Simons, Stony Brook, research, STEM"},
+ {"title":"QuestBridge National College Match","type":"Scholarship","provider":"QuestBridge","country":"USA","level":"High-achieving low-income high school seniors","deadline":"2027-10-01","url":"https://www.questbridge.org/apply-to-college/programs/national-college-match","summary":"Full four-year scholarships worth over $360,000 to 55 top US colleges for high-achieving students from low-income backgrounds.","tags":"QuestBridge, scholarship, USA, full ride"},
+ {"title":"Mastercard Foundation Scholars Program","type":"Scholarship","provider":"Mastercard Foundation","country":"Africa / global","level":"African students, undergraduate and masters","deadline":"2027-01-15","url":"https://mastercardfdn.org/en/what-we-do/our-programs/mastercard-foundation-scholars-program/","summary":"Fully funded scholarships and leadership development for talented, service-oriented young Africans at partner universities worldwide.","tags":"Mastercard, scholarship, Africa, fully funded"},
+ {"title":"African Leadership Academy (ALA)","type":"Scholarship","provider":"African Leadership Academy","country":"South Africa / Africa","level":"African students aged 16-19","deadline":"2027-01-15","url":"https://www.africanleadershipacademy.org/","summary":"Two-year pre-university programme in leadership, entrepreneurship and African studies with need-based financial aid.","tags":"ALA, leadership, entrepreneurship, Africa"},
+ {"title":"Mastercard Foundation Scholars at Cambridge","type":"Scholarship","provider":"University of Cambridge","country":"UK","level":"African students applying for a master's degree","deadline":"2026-12-01","url":"https://www.mastercardfoundation.fund.cam.ac.uk/","summary":"Fully funded master's scholarships for talented young Africans, covering tuition and a monthly maintenance allowance.","tags":"Cambridge, Mastercard, masters, fully funded"},
+ {"title":"Chevening Scholarship","type":"Scholarship","provider":"UK Foreign, Commonwealth & Development Office","country":"UK","level":"Graduates with an undergraduate degree and at least two years of work experience","deadline":"See official page","url":"https://www.chevening.org/scholarships/","summary":"Fully funded one-year master's scholarship at any UK university for future leaders from Chevening-eligible countries. Applicants choose three eligible courses and commit to returning home for two years.","tags":"Chevening, UK, masters, leadership, fully funded"},
+ {"title":"Rhodes Scholarship","type":"Scholarship","provider":"Rhodes Trust / University of Oxford","country":"UK","level":"Outstanding graduates applying for full-time postgraduate study at Oxford","deadline":"See official page","url":"https://www.rhodeshouse.ox.ac.uk/scholarships/the-rhodes-scholarship/","summary":"The world's oldest international graduate scholarship: covers Oxford course fees and provides an annual stipend for postgraduate study. Eligibility and deadlines vary by constituency.","tags":"Rhodes, Oxford, postgraduate, leadership"},
+ {"title":"Fulbright Foreign Student Program","type":"Scholarship","provider":"U.S. Department of State / IIE","country":"USA","level":"Non-U.S. graduates applying for a U.S. master's or PhD","deadline":"See official page","url":"https://foreign.fulbrightonline.org/about/foreign-student-program","summary":"About 4,000 grants each year for international students to pursue graduate study or research in the United States. Applications are administered by the Fulbright commission or U.S. embassy in each home country.","tags":"Fulbright, USA, masters, PhD, research"},
+ {"title":"Gates Cambridge Scholarship","type":"Scholarship","provider":"Gates Cambridge Trust","country":"UK","level":"Non-UK citizens applying for an eligible Cambridge postgraduate course","deadline":"2027-01-06","url":"https://www.gatescambridge.org/apply/","summary":"Full-cost postgraduate scholarships at Cambridge for academically outstanding applicants from outside the UK who show leadership potential and a commitment to improving lives.","tags":"Gates Cambridge, UK, postgraduate, fully funded"},
+ {"title":"Erasmus Mundus Joint Masters","type":"Scholarship","provider":"European Union / Erasmus+","country":"Europe / global","level":"Bachelor's graduates or final-year bachelor's students worldwide","deadline":"See official page","url":"https://erasmus-plus.ec.europa.eu/opportunities/individuals/students/erasmus-mundus-joint-masters","summary":"One- to two-year joint master's degrees taught across several universities, with competitive full scholarships covering participation costs, travel, visa and living allowance. Most applications open October–January.","tags":"Erasmus Mundus, Europe, masters, scholarship"},
+ {"title":"DAAD Development-Related Postgraduate Courses (EPOS)","type":"Scholarship","provider":"German Academic Exchange Service (DAAD)","country":"Germany","level":"Graduates from developing countries with at least two years of relevant work experience","deadline":"See official page","url":"https://www2.daad.de/deutschland/stipendium/datenbank/en/21148-scholarship-database/?detail=50076777","summary":"Fully funded master's and doctoral scholarships in development-related fields at German universities. Deadlines vary by course; applications go directly to the chosen programme.","tags":"DAAD, Germany, EPOS, development, masters, PhD"},
+]
+
 PREUNI_COURSES = [
     {"title":"Academic English for University","category":"Pre-university","level":"Secondary → University","duration":"8 weeks","summary":"Essay writing, academic reading, citation, and presentation skills for university study.","topics":["Academic vocabulary","Essay structure","Referencing","Seminar speaking"]},
     {"title":"Foundation Mathematics","category":"Pre-university","level":"Secondary → University","duration":"10 weeks","summary":"Algebra, functions, trigonometry and introductory calculus to bridge into STEM degrees.","topics":["Algebra","Functions","Trigonometry","Limits"]},
@@ -83,6 +104,10 @@ SMTP_TLS = os.environ.get("SMTP_TLS", "1") != "0"
 BIRD_API_KEY = os.environ.get("BIRD_API_KEY", "")
 BIRD_FROM = os.environ.get("BIRD_FROM", "onboarding@messagebird.dev")
 BIRD_REGION = os.environ.get("BIRD_REGION", "")
+HELPLINE_PHONE = os.environ.get("HELPLINE_PHONE", "0726495648")
+HELPLINE_EMAIL = os.environ.get("HELPLINE_EMAIL", "honoremukunzi6@gmail.com")
+# If no email provider is configured, accounts are auto-verified so signups actually work.
+EMAIL_ENABLED = bool(BIRD_API_KEY or SMTP_HOST)
 MAIL_OUTBOX = ROOT / "mail_outbox.log"
 CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
 CLOUDINARY_UPLOAD_PRESET = os.environ.get("CLOUDINARY_UPLOAD_PRESET", "")
@@ -103,11 +128,20 @@ def slugify_filename(name: str) -> str:
     name = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip(".-")
     return name[:120] or "upload.bin"
 
-def db() -> sqlite3.Connection:
+@contextmanager
+def db():
+    """Open a SQLite connection and always close it when the block ends."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 OPPORTUNITY_SEEDS = [
  {"type":"Scholarship","title":"University of Rwanda Mastercard Foundation Scholars Program 2026/2027","provider":"University of Rwanda + Mastercard Foundation","country":"Rwanda / Africa","level":"Master's students, African citizens","deadline":"2026-08-22","url":"https://www.opportunitiesforafricans.com/university-of-rwanda-mastercard-foundation-scholars-program-2026-2027-for-young-africans/","summary":"Fully funded master's scholarships at the University of Rwanda, with tuition, mentoring, leadership development, and internships. Verify final eligibility on the official portal before applying.","tags":"rwanda,mastercard,graduate,fully-funded,stem,leadership","source":"Opportunities for Africans, published 2026-07-29"},
@@ -273,6 +307,12 @@ def init_db() -> None:
             "platform_fee": "ALTER TABLE pledges ADD COLUMN platform_fee REAL NOT NULL DEFAULT 0",
             "creator_amount": "ALTER TABLE pledges ADD COLUMN creator_amount REAL NOT NULL DEFAULT 0",
             "auto_description": "ALTER TABLE opportunities ADD COLUMN auto_description TEXT NOT NULL DEFAULT ''",
+            "account_type": "ALTER TABLE users ADD COLUMN account_type TEXT NOT NULL DEFAULT ''",
+            "career": "ALTER TABLE users ADD COLUMN career TEXT NOT NULL DEFAULT ''",
+            "education_level": "ALTER TABLE users ADD COLUMN education_level TEXT NOT NULL DEFAULT ''",
+            "source_mode": "ALTER TABLE opportunity_submissions ADD COLUMN source_mode TEXT NOT NULL DEFAULT 'manual'",
+            "fetched_summary": "ALTER TABLE opportunity_submissions ADD COLUMN fetched_summary TEXT NOT NULL DEFAULT ''",
+            "fetched_image": "ALTER TABLE opportunity_submissions ADD COLUMN fetched_image TEXT NOT NULL DEFAULT ''",
         }.items():
             try:
                 conn.execute(ddl)
@@ -281,6 +321,15 @@ def init_db() -> None:
 
         for item in OPPORTUNITY_SEEDS:
             conn.execute("""INSERT OR IGNORE INTO opportunities(type,title,provider,country,level,deadline,url,summary,tags,source,created_at) VALUES(:type,:title,:provider,:country,:level,:deadline,:url,:summary,:tags,:source,:created_at)""", {**item, "created_at": now_iso()})
+        for prog in FEATURED_PROGRAMS:
+            cur = conn.execute("""INSERT OR IGNORE INTO opportunities(type,title,provider,country,level,deadline,url,summary,tags,source,created_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                (prog["type"], prog["title"], prog["provider"], prog["country"], prog["level"],
+                 prog["deadline"], prog["url"], prog["summary"], prog["tags"], "featured_program", now_iso()))
+            if cur.rowcount:
+                conn.execute("UPDATE opportunities SET auto_description=? WHERE id=?",
+                    (make_auto_description({"type":prog["type"],"title":prog["title"],"provider":prog["provider"],
+                      "country":prog["country"],"level":prog["level"],"deadline":prog["deadline"],"summary":prog["summary"]}), cur.lastrowid))
         demo = conn.execute("SELECT id FROM users WHERE email=?", ("demo@70scholar.local",)).fetchone()
         if demo:
             demo_id = demo["id"]
@@ -320,6 +369,65 @@ def get_setting(key: str, default: str = "") -> str:
 def set_setting(key: str, value: str) -> None:
     with db() as conn:
         conn.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+
+def is_safe_public_url(url: str) -> bool:
+    """Block SSRF: only public http(s) hosts, no private/loopback addresses."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return False
+        host = parsed.hostname.lower()
+        if host in ("localhost", "localhost.localdomain") or host.endswith(".local"):
+            return False
+        for info in socket.getaddrinfo(host, None):
+            ip = ipaddress.ip_address(info[4][0])
+            if not ip.is_global or ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved:
+                return False
+        return True
+    except Exception:
+        return False
+
+class _SafeRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not is_safe_public_url(newurl):
+            raise ValueError("Redirect to an unsafe address was blocked.")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+def safe_http_get(url: str, timeout: int = 10, max_bytes: int = 1_500_000) -> tuple[str, str]:
+    if not is_safe_public_url(url):
+        raise ValueError("Only public http/https links are allowed.")
+    opener = urllib.request.build_opener(_SafeRedirect())
+    req = urllib.request.Request(url, headers={"User-Agent": "70ScholarBot/1.0 (opportunity preview)"})
+    with opener.open(req, timeout=timeout) as resp:
+        ctype = (resp.headers.get("Content-Type") or "").lower()
+        raw = resp.read(max_bytes)
+    return raw.decode("utf-8", errors="replace"), ctype
+
+def fetch_page_metadata(url: str) -> dict:
+    """Extract title, description, image and site name from a public web page."""
+    text, ctype = safe_http_get(url)
+    if "html" not in ctype and "<" not in text[:500]:
+        raise ValueError("That link does not look like a web page.")
+    def meta(pattern):
+        m = re.search(pattern, text, re.I | re.S)
+        return strip_tags(m.group(1)).strip() if m else ""
+    title = meta(r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)') \
+        or meta(r'<meta[^>]+name=["\']twitter:title["\'][^>]+content=["\']([^"\']+)') \
+        or meta(r"<title[^>]*>(.*?)</title>")
+    desc = meta(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)') \
+        or meta(r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)')
+    img = meta(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)')
+    site = meta(r'<meta[^>]+property=["\']og:site_name["\'][^>]+content=["\']([^"\']+)') \
+        or urlparse(url).netloc.replace("www.", "")
+    heading = meta(r"<h1[^>]*>(.*?)</h1>")
+    body_text = strip_tags(re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", text, flags=re.I | re.S))[:1200]
+    if not title:
+        title = heading or urlparse(url).netloc
+    if not desc:
+        desc = body_text[:400] or "No description was found on this page. Verify the details before publishing."
+    return {"title": title[:200], "summary": desc[:900], "image": img[:500],
+            "site": site[:160], "url": url[:500], "type": infer_type(title),
+            "deadline": infer_deadline(title + " " + desc + " " + body_text[:600])}
 
 def make_auto_description(row) -> str:
     """Build a rich hover description from whatever fields exist."""
@@ -451,14 +559,17 @@ def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: s
         if "profile_photo_url" in user.keys() and user["profile_photo_url"]:
             avatar = f"<img src='{e(user['profile_photo_url'])}' alt='Profile photo'>"
         else:
-            initials = ''.join([part[0].upper() for part in user['name'].split()[:2]]) or 'U'
-            avatar = f"<span>{e(initials)}</span>"
-        profile_link = f"<a class='nav-profile {'is-active' if active=='account' else ''}' href='/account' title='Account settings'>{avatar}</a>"
+            avatar = f"<img src='/static/images/default-avatar.svg?v={APP_VERSION}' alt='Profile picture'>"
+        profile_link = f"<a class='nav-profile {'is-active' if active=='account' else ''}' href='/account' title='Account settings'>{avatar}</a><span class='nav-username'>{e(user['name'].split()[0])}</span>"
         admin_link = f"<a class='nav-link {'is-active' if active=='admin' else ''}' href='/admin'>Admin</a>" if is_admin(user) else ''
         nav_auth = f"""<a class="nav-link {'is-active' if active=='dashboard' else ''}" href="/dashboard">Dashboard</a><a class="nav-link {'is-active' if active=='workspace' else ''}" href="/workspace">Workspace</a><a class="nav-link {'is-active' if active=='messages' else ''}" href="/messages">Messages</a><a class="nav-link {'is-active' if active=='submit' else ''}" href="/submit">Add opportunity</a><a class="nav-link {'is-active' if active=='account' else ''}" href="/account">Account</a>{admin_link}{profile_link}<form class="logout-form" action="/logout" method="post"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><button>Log out</button></form>"""
     else:
         nav_auth = "<a class='nav-link' href='/login'>Log in</a><a class='pill small' href='/signup'>Create account</a>"
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v={APP_VERSION}"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='courses' else ''}" href="/courses">Courses</a><a class="nav-link {'is-active' if active=='exams' else ''}" href="/exams">Exam prep</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p><p class="copyright">© {datetime.now(timezone.utc).year} {COMPANY_NAME}. All rights reserved.</p></footer><script src="/static/app.js?v={APP_VERSION}"></script></body></html>"""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v={APP_VERSION}"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='courses' else ''}" href="/courses">Courses</a><a class="nav-link {'is-active' if active=='exams' else ''}" href="/exams">Exam prep</a><a class="nav-link {'is-active' if active=='programs' else ''}" href="/programs">Programs</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p>
+    <div class="helpline"><span class="helpline-label">Need help?</span>
+      <a href="tel:{HELPLINE_PHONE}">📞 {HELPLINE_PHONE}</a>
+      <a href="mailto:{HELPLINE_EMAIL}">✉️ {HELPLINE_EMAIL}</a></div>
+    <p class="copyright">© {datetime.now(timezone.utc).year} {COMPANY_NAME}. All rights reserved.</p></footer><script src="/static/app.js?v={APP_VERSION}"></script></body></html>"""
 
 HOMEPAGE_PHOTOS = [
     {"file": "students-library.jpg", "w": 1200, "h": 801,
@@ -510,12 +621,28 @@ def render_home(user):
             "pledged": conn.execute("SELECT COALESCE(SUM(amount),0) c FROM pledges").fetchone()["c"],
         }
     story_section = f'''<section class="story-section"><div class="story-inner"><p class="eyebrow eyebrow-dark">The story 70Scholar is building</p><h2>A path for the student who almost gave up searching.</h2><p>70Scholar was created for students who keep asking, "Where are the scholarships, internships, competitions, sponsors, and people who will believe in my project?" The goal is to make answers easier to find, applications easier to prepare, and student projects easier to support.</p><p>As more students use 70Scholar, this section will grow into a verified wall of wins: scholarships found, internships applied for, jobs reached, sponsors connected, and projects funded. We will count real success only when students confirm it — because trust matters.</p><div class="impact-stats"><div><strong>{stats['opportunities']}</strong><span>opportunities currently listed</span></div><div><strong>{stats['projects']}</strong><span>student projects published</span></div><div><strong>{money(stats['pledged'])}</strong><span>pledges recorded for builders</span></div></div></div></section>'''
-    body = '''<section class="hero" id="hero"><div class="hero-bg-beyond" aria-hidden="true"></div><div class="hero-bg-now" aria-hidden="true"></div><div class="hero-content"><p class="brand-display"><span class="brand-num">70</span><span class="brand-word">Scholar</span></p><p class="eyebrow">Matched to your level. Built to launch.</p><h1>There's a version of your future<br>still waiting to be found.</h1><p class="subhead">70Scholar finds scholarships, internships, grants, and competitions built for where you stand — then gives you a secure workspace to build the projects that get you noticed, funded, or sold.</p><div class="hero-actions"><a href="/opportunities" class="cta-primary">See real open opportunities <span class="arrow">→</span></a><a href="/marketplace" class="cta-secondary">Fund or buy student projects</a></div><p class="hero-micro">Real listings, refreshed from trusted opportunity feeds.</p></div><div class="scroll-hint" aria-hidden="true"><span></span></div></section>''' + render_typewriter() + story_section + render_slideshow() + render_photo_gallery() + render_extra_features() + '''
-<section class="gap-section"><p class="eyebrow eyebrow-dark">Why most students miss out</p><p class="gap-statement">Most scholarships don't go unclaimed because nobody qualified. They go unclaimed because the right student never found them — or found them too late to build something strong.</p></section>
-<section class="journey-section" id="journey"><div class="journey-header"><p class="eyebrow">The path across</p><h2>Discover. Build. Launch. Fund.</h2></div><div class="journey-path"><div class="journey-step"><span class="step-number">01</span><h3>Discover</h3><p>Browse real openings and save the ones that fit your country, field, deadline, and level.</p></div><div class="journey-step"><span class="step-number">02</span><h3>Build</h3><p>Keep drafts, pitch text, links, files, and project details in your private account so unfinished work stays safe.</p></div><div class="journey-step"><span class="step-number">03</span><h3>Launch</h3><p>Publish a project to the marketplace, attach a demo or release file, and invite buyers, donors, mentors, or funders.</p></div></div></section>
-<section class="opportunities-section"><div class="opp-header"><p class="eyebrow eyebrow-dark">What's waiting on the other side</p><h2>Every door, sorted by which one actually opens for you.</h2></div><div class="opportunity-cards feature-cards"><div class="opp-card"><div class="icon-dot">🎓</div><h3>Scholarships</h3><p>Funding matched to your field, level, and country, with deadlines you can track.</p></div><div class="opp-card"><div class="icon-dot">💼</div><h3>Internships</h3><p>Roles sized for where you actually are in school, not five-year-experience traps.</p></div><div class="opp-card"><div class="icon-dot">🏆</div><h3>Competitions & grants</h3><p>Contests and small grants your project can realistically compete for.</p></div></div></section>
-<section class="workspace-section"><div class="workspace-inner"><div class="workspace-visual" aria-hidden="true"><div class="ws-card c1"></div><div class="ws-card c2"></div><div class="ws-card c3"></div></div><div class="workspace-copy"><p class="eyebrow">Where the work actually happens</p><h2>Not just a plan. A place to build it.</h2><p>Create an account, save unfinished project drafts, upload a release file, and later publish the project for funding or sale. Funders can pledge support, buyers can contact makers, and students can continue from where they stopped.</p></div></div></section>
-<section class="final-cta" id="final-cta"><h2>Cross over.</h2><p>Somewhere on the other side, there's a deadline that hasn't found you yet. Better to be early.</p><a href="/signup" class="cta-primary">Create your free workspace <span class="arrow">→</span></a></section>'''
+    hero_section = '''<section class="hero" id="hero"><div class="hero-bg-beyond" aria-hidden="true"></div><div class="hero-bg-now" aria-hidden="true"></div><div class="hero-content"><p class="brand-display"><span class="brand-num">70</span><span class="brand-word">Scholar</span></p><p class="eyebrow">Matched to your level. Built to launch.</p><h1>There's a version of your future<br>still waiting to be found.</h1><p class="subhead">70Scholar finds scholarships, internships, grants, and competitions built for where you stand — then gives you a secure workspace to build the projects that get you noticed, funded, or sold.</p><div class="hero-actions"><a href="/opportunities" class="cta-primary">See real open opportunities <span class="arrow">→</span></a><a href="/marketplace" class="cta-secondary">Fund or buy student projects</a></div><p class="hero-micro">Real listings, refreshed from trusted opportunity feeds.</p></div><div class="scroll-hint" aria-hidden="true"><span></span></div></section>'''
+    gap_section = '''<section class="gap-section"><p class="eyebrow eyebrow-dark">Why most students miss out</p><p class="gap-statement">Most scholarships don't go unclaimed because nobody qualified. They go unclaimed because the right student never found them — or found them too late to build something strong.</p></section>'''
+    journey_section = '''<section class="journey-section" id="journey"><div class="journey-header"><p class="eyebrow">The path across</p><h2>Discover. Build. Launch. Fund.</h2></div><div class="journey-path"><div class="journey-step"><span class="step-number">01</span><h3>Discover</h3><p>Browse real openings and save the ones that fit your country, field, deadline, and level.</p></div><div class="journey-step"><span class="step-number">02</span><h3>Build</h3><p>Keep drafts, pitch text, links, files, and project details in your private account so unfinished work stays safe.</p></div><div class="journey-step"><span class="step-number">03</span><h3>Launch</h3><p>Publish a project to the marketplace, attach a demo or release file, and invite buyers, donors, mentors, or funders.</p></div></div></section>'''
+    opportunities_section = '''<section class="opportunities-section"><div class="opp-header"><p class="eyebrow eyebrow-dark">What's waiting on the other side</p><h2>Every door, sorted by which one actually opens for you.</h2></div><div class="opportunity-cards feature-cards"><div class="opp-card"><div class="icon-dot">🎓</div><h3>Scholarships</h3><p>Funding matched to your field, level, and country, with deadlines you can track.</p></div><div class="opp-card"><div class="icon-dot">💼</div><h3>Internships</h3><p>Roles sized for where you actually are in school, not five-year-experience traps.</p></div><div class="opp-card"><div class="icon-dot">🏆</div><h3>Competitions & grants</h3><p>Contests and small grants your project can realistically compete for.</p></div></div></section>'''
+    workspace_section = '''<section class="workspace-section"><div class="workspace-inner"><div class="workspace-visual" aria-hidden="true"><div class="ws-card c1"></div><div class="ws-card c2"></div><div class="ws-card c3"></div></div><div class="workspace-copy"><p class="eyebrow">Where the work actually happens</p><h2>Not just a plan. A place to build it.</h2><p>Create an account, save unfinished project drafts, upload a release file, and later publish the project for funding or sale. Funders can pledge support, buyers can contact makers, and students can continue from where they stopped.</p></div></div></section>'''
+    final_cta_section = '''<section class="final-cta" id="final-cta"><h2>Cross over.</h2><p>Somewhere on the other side, there's a deadline that hasn't found you yet. Better to be early.</p><a href="/signup" class="cta-primary">Create your free workspace <span class="arrow">→</span></a></section>'''
+    program_cards = "".join(
+        f"""<article class="program-teaser"><span class="tag">{e(pr['type'])}</span>
+          <h3>{e(pr['title'])}</h3><p class="provider">{e(pr['provider'])}</p>
+          <p>{e(pr['summary'][:165])}{'…' if len(pr['summary'])>165 else ''}</p>
+          <p class="deadline">{e(deadline_badge(pr['deadline']))}</p>
+          <a href="{e(pr['url'])}" target="_blank" rel="noopener">Official page ↗</a></article>"""
+        for pr in FEATURED_PROGRAMS[:3])
+    programs_section = f"""<section class="programs-section"><div class="programs-inner">
+      <p class="eyebrow">Verified programmes</p><h2>Start with opportunities that already change lives.</h2>
+      <p>YYAS, YYGS, RSI and {len(FEATURED_PROGRAMS)-3} more — each linked to its official page, with eligibility and deadlines in one place.</p>
+      <div class="program-teasers">{program_cards}</div>
+      <a class="cta-primary" href="/programs">Explore all featured programs <span class="arrow">→</span></a>
+      </div></section>"""
+    body = (hero_section + render_typewriter() + journey_section + opportunities_section
+            + programs_section + gap_section + render_photo_gallery() + render_slideshow()
+            + workspace_section + story_section + render_extra_features() + final_cta_section)
     return page_shell("Future waiting to be found", body, user)
 
 SLIDESHOW_PHOTOS = [
@@ -630,6 +757,23 @@ def render_exams(user, msg: str = ""):
       <div class="course-grid">{cards}</div></section>"""
     return page_shell("Exam preparation", body, user, "exams")
 
+def render_programs(user):
+    cards = "".join([
+        hover_card(
+            f"""<article class="course-card program-card"><span class="tag">{e(pr['type'])}</span>
+            <h3>{e(pr['title'])}</h3><p class="provider">{e(pr['provider'])} · {e(pr['country'])}</p>
+            <p class="deadline">{e(deadline_badge(pr['deadline']))}</p><p>{e(pr['summary'])}</p>
+            <p class="provider">{e(pr['level'])}</p>
+            <a class="cta-primary slim" href="{e(pr['url'])}" target="_blank" rel="noopener">Official page ↗</a></article>""",
+            f"{pr['title']} by {pr['provider']}. {pr['summary']} Eligible: {pr['level']}. Location: {pr['country']}. Deadline: {pr['deadline']}. Always confirm on the official page.",
+            "course-wrap") for pr in FEATURED_PROGRAMS
+    ])
+    body = f"""<section class="page-hero compact"><p class="eyebrow">Featured programmes</p>
+      <h1>YYAS, YYGS, RSI and more.</h1><p>{len(FEATURED_PROGRAMS)} real programmes with official links, eligibility and deadlines in one place. Hover any card for the details.</p></section>
+      <section class="panel-section"><div class="course-grid">{cards}</div>
+      <p class="muted">Deadlines change each year — always confirm dates and eligibility on the official page before applying.</p></section>"""
+    return page_shell("Featured programs", body, user, "programs")
+
 def render_submit(user, msg: str = "", kind: str = "success"):
     opts = "".join(f"<option>{t}</option>" for t in ["Scholarship","Internship","Competition","Grant","Hackathon","Application","Opportunity"])
     with db() as conn:
@@ -641,7 +785,7 @@ def render_submit(user, msg: str = "", kind: str = "success"):
       <div class="submit-layout">
         <form method="post" action="/opportunity/submit" class="builder-form">
           <input type="hidden" name="csrf" value="{e(user['csrf'])}">
-          <h2>Opportunity details</h2>
+          <h2>Option 1 — fill in the details</h2>
           <div class="form-row"><label>Type<select name="type">{opts}</select></label>
           <label>Deadline<input name="deadline" placeholder="e.g. 2026-12-31 or Rolling" required></label></div>
           <label>Title<input name="title" required maxlength="200" placeholder="Official opportunity name"></label>
@@ -653,7 +797,15 @@ def render_submit(user, msg: str = "", kind: str = "success"):
           <label>Tags<input name="tags" maxlength="200" placeholder="STEM, women, Africa"></label>
           <button class="cta-primary" type="submit">Submit for review</button>
         </form>
-        <div class="builder-panel"><h2>Your submissions</h2>
+        <div class="builder-panel"><h2>Option 2 — just paste a link</h2>
+        <p class="muted">Found an opportunity page? Paste its link. We fetch the title, description and image automatically, then the admin reviews what we found before anything is published.</p>
+        <form method="post" action="/opportunity/submit-link" class="builder-form">
+          <input type="hidden" name="csrf" value="{e(user['csrf'])}">
+          <label>Opportunity link <span class='req'>*</span><input name="url" type="url" required placeholder="https://example.com/scholarship"></label>
+          <label>Why should others see it? <span class='optional'>(optional)</span><textarea name="note" maxlength="600" placeholder="A short note for the admin"></textarea></label>
+          <button class="cta-primary" type="submit">Fetch &amp; send for review</button>
+        </form>
+        <h2 style="margin-top:2rem">Your submissions</h2>
         <ul class="clean-list">{rows if rows else '<li>Nothing submitted yet.</li>'}</ul>
         <p class="muted">Pending items are visible only to you and the admin until approved.</p></div>
       </div></section>"""
@@ -664,14 +816,22 @@ def render_auth(mode: str, msg: str = "", next_url: str = ""):
     is_signup = mode == "signup"; title = "Create your account" if is_signup else "Log in"; action = "/signup" if is_signup else "/login"
     safe_next = next_url if next_url.startswith("/") and not next_url.startswith("//") else ""
     hidden_next = f"<input type='hidden' name='next' value='{e(safe_next)}'>" if safe_next and not is_signup else ""
-    extra = '<label>Full name<input required name="name" autocomplete="name" placeholder="Your name"></label>' if is_signup else ''
+    if is_signup:
+        type_opts = "".join(f"<option value='{t}'>{t}</option>" for t in ACCOUNT_TYPES)
+        extra = f"""<label>Full name <span class='req'>*</span><input required name="name" autocomplete="name" placeholder="Your name"></label>
+        <p class='form-hint'>Only your name and email are required. The rest helps us personalise your experience.</p>
+        <label>I am a... <span class='optional'>(optional)</span><select name="account_type"><option value=''>Prefer not to say</option>{type_opts}</select></label>
+        <label>Career / field of interest <span class='optional'>(optional)</span><input name="career" maxlength="120" placeholder="e.g. Medicine, Engineering, Law, Arts"></label>
+        <label>Education level <span class='optional'>(optional)</span><input name="education_level" maxlength="80" placeholder="e.g. Senior 5, A-Level, undergraduate"></label>"""
+    else:
+        extra = ''
     switch = "Already have an account? <a href='/login'>Log in</a>." if is_signup else "New here? <a href='/signup'>Create an account</a>."
     forgot = "" if is_signup else "<p class='muted'><a href='/forgot-password'>Forgot password?</a></p>"
-    body = f"""<section class="auth-wrap"><form class="auth-card" method="post" action="{action}"><p class="eyebrow eyebrow-dark">Secure workspace</p><h1>{title}</h1>{flash(msg,'error') if msg else ''}{hidden_next}{extra}<label>Email<input required type="email" name="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input required type="password" name="password" autocomplete="{'new-password' if is_signup else 'current-password'}" minlength="8" placeholder="At least 8 characters"></label><button class="cta-primary auth-button" type="submit">{title}</button>{forgot}<p class="muted">{switch}</p></form></section>"""
+    body = f"""<section class="auth-wrap"><form class="auth-card" method="post" action="{action}"><p class="eyebrow eyebrow-dark">Secure workspace</p><h1>{title}</h1>{flash(msg,'error') if msg else ''}{hidden_next}{extra}<label>Email <span class='req'>*</span><input required type="email" name="email" autocomplete="email" placeholder="you@example.com"></label><label>Password <span class='req'>*</span><input required type="password" name="password" autocomplete="{'new-password' if is_signup else 'current-password'}" minlength="8" placeholder="At least 8 characters"></label><button class="cta-primary auth-button" type="submit">{title}</button>{forgot}<p class="muted">{switch}</p></form></section>"""
     return page_shell(title, body, None)
 
 def render_notice(title: str, message: str, user=None):
-    body = f"""<section class='auth-wrap'><div class='auth-card'><p class='eyebrow eyebrow-dark'>70Scholar</p><h1>{e(title)}</h1><p>{e(message)}</p><p class='muted'>In local development, emails are saved in <strong>mail_outbox.log</strong>.</p><div class='form-actions'><a class='cta-primary' href='/login'>Log in</a><a class='ghost-button' href='/'>Home</a></div></div></section>"""
+    body = f"""<section class='auth-wrap'><div class='auth-card'><p class='eyebrow eyebrow-dark'>70Scholar</p><h1>{e(title)}</h1><p>{e(message)}</p><div class='form-actions'><a class='cta-primary' href='/login'>Log in</a><a class='ghost-button' href='/'>Home</a></div></div></section>"""
     return page_shell(title, body, user)
 
 def render_forgot_password(msg: str = ""):
@@ -873,7 +1033,7 @@ def infer_deadline(text: str) -> str:
             for fmt in ("%B %d, %Y", "%d %B %Y"):
                 try: return datetime.strptime(raw, fmt).date().isoformat()
                 except ValueError: pass
-    return "2026-12-31"
+    return "See official page"  # never invent a deadline
 
 def strip_tags(text: str) -> str:
     text = re.sub(r"<[^>]+>", " ", text or "")
@@ -949,24 +1109,64 @@ def render_admin(user, msg=""):
         <span class='toggle-knob'></span></button>
       <span class='toggle-label'>Auto-import is <strong>{'ON' if auto_on else 'OFF'}</strong></span></form>"""
     source_rows = ''.join([f"<li><span>{e(r['url'])}</span><form method='post' action='/admin/source/fetch' class='table-form'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><input type='hidden' name='url' value='{e(r['url'])}'><button class='ghost-button' type='submit'>Fetch now</button></form><form method='post' action='/admin/source/delete' class='table-form'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><input type='hidden' name='source_id' value='{r['id']}'><button class='ghost-button danger' type='submit'>Remove</button></form></li>" for r in sources])
-    sub_rows = ''.join([f"<article class='mini-card moderation-card'><span class='tag'>{e(r['type'])}</span><h3>{e(r['title'])}</h3><p>{e(r['summary'])}</p><p class='provider'>by {e(r['submitter'])} · {e(r['submitter_email'])} · deadline {e(r['deadline'])}</p><p><a href='{e(r['url'])}' target='_blank' rel='noopener'>source ↗</a></p><form method='post' action='/admin/submission/action' class='card-actions'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><input type='hidden' name='submission_id' value='{r['id']}'><button name='action' value='approve' class='cta-primary slim' type='submit'>Approve</button><button name='action' value='reject' class='ghost-button' type='submit'>Reject</button></form></article>" for r in submissions])
+    def submission_card(r):
+        link_mode = r["source_mode"] == "link"
+        preview = ""
+        if r["fetched_image"]:
+            preview = f"<img class='link-preview-image' src='{e(r['fetched_image'])}' alt='Preview from submitted link' loading='lazy'>"
+        fetched_note = ""
+        if r["fetched_summary"]:
+            fetched_note = f"<div class='fetched-box'><strong>What we found on the page</strong><p>{e(r['fetched_summary'])}</p></div>"
+        mode_tag = "Link preview" if link_mode else "Manual entry"
+        edit_fields = f"""<div class='admin-edit-grid'>
+          <label>Title<input name="title" value="{e(r['title'])}" maxlength="200"></label>
+          <label>Provider<input name="provider" value="{e(r['provider'])}" maxlength="160"></label>
+          <label>Deadline<input name="deadline" value="{e(r['deadline'])}" maxlength="80"></label>
+          </div><label class='admin-summary-label'>Published summary<textarea name="summary" rows="3" maxlength="1200">{e(r['summary'])}</textarea></label>""" if link_mode else ""
+        return f"""<article class='mini-card moderation-card submission-card'>
+          {preview}<span class='tag'>{e(r['type'])} · {mode_tag}</span><h3>{e(r['title'])}</h3>
+          <p>{e(r['summary'])}</p>{fetched_note}
+          <p class='provider'>by {e(r['submitter'])} · {e(r['submitter_email'])} · deadline {e(r['deadline'])}</p>
+          <p><a href='{e(r['url'])}' target='_blank' rel='noopener'>Open original link ↗</a></p>
+          <form method='post' action='/admin/submission/action' class='card-actions'>
+            <input type='hidden' name='csrf' value='{e(user['csrf'])}'>
+            <input type='hidden' name='submission_id' value='{r['id']}'>
+            {edit_fields}
+            <div class='card-actions'>
+              <label class='admin-review-note'><input type='checkbox' name='confirmed' value='1'> I checked the official page</label>
+              <button name='action' value='approve' class='cta-primary slim' type='submit'>Approve &amp; publish</button>
+              <button name='action' value='reject' class='ghost-button' type='submit'>Reject</button>
+            </div>
+          </form></article>"""
+    sub_rows = ''.join(submission_card(r) for r in submissions)
     body=f"""
     <section class='page-hero compact admin-hero'><p class='eyebrow'>Admin command center</p><h1>Manage users, opportunities, moderation, and growth.</h1><p>Review marketplace submissions, manage roles, import opportunities, and keep 70Scholar safe. Admin access is restricted to <strong>{OWNER_ADMIN_EMAIL}</strong>.</p></section>
-    <section class='admin-grid'>
+    <section class='admin-shell'>
+      <aside class='admin-sidebar'><p class='eyebrow eyebrow-dark'>Workspace</p><h2>Admin menu</h2>
+        <nav class='admin-nav' aria-label='Admin sections'>
+          <a href='#review'>① Review queue</a><a href='#content'>② Content</a>
+          <a href='#automation'>③ Automation</a><a href='#people'>④ People &amp; records</a>
+        </nav><p class='admin-sidebar-note'>Every community submission stays private until you approve it.</p></aside>
+      <div class='admin-main'>
       <div class='stats-row'>{cards}</div>
       {flash(msg,'success') if msg else ''}
+      <h2 class='admin-group-title' id='review'>1 · Review queue</h2>
+      <div class='dash-panel wide' id='submissions'><h2>Community submissions</h2><p class='muted'>User-submitted opportunities stay private until you approve them. Link submissions include a fetched preview you can edit before publishing.</p><div class='mini-grid'>{sub_rows if sub_rows else '<p class="empty">No submissions waiting for review.</p>'}</div></div>
       <div class='dash-panel'><h2>Project moderation queue</h2><p class='muted'>Projects submitted for marketplace publication appear here first.</p><div class='mini-grid'>{pending_rows if pending_rows else '<p class="empty">No projects waiting for review.</p>'}</div></div>
-      <div class='dash-panel admin-form'><h2>Add an opportunity manually</h2><form method='post' action='/admin/opportunity/add' class='builder-form'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><div class='form-row'><label>Type<select name='type'><option>Scholarship</option><option>Internship</option><option>Competition</option><option>Grant</option><option>Hackathon</option><option>Opportunity</option></select></label><label>Deadline<input required type='date' name='deadline'></label></div><label>Title<input required name='title'></label><div class='form-row'><label>Provider<input required name='provider'></label><label>Country / region<input required name='country' value='Global'></label></div><label>Level<input required name='level' value='Students / young builders'></label><label>Application URL<input required type='url' name='url'></label><label>Summary<textarea required name='summary' rows='4'></textarea></label><label>Tags<input name='tags' placeholder='ai,rwanda,climate'></label><button class='cta-primary' type='submit'>Post opportunity</button></form></div>
+      <h2 class='admin-group-title' id='content'>2 · Content &amp; catalogue</h2>
+      <div class='dash-panel admin-form' id='add-opportunity'><h2>Add an opportunity manually</h2><form method='post' action='/admin/opportunity/add' class='builder-form'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><div class='form-row'><label>Type<select name='type'><option>Scholarship</option><option>Internship</option><option>Competition</option><option>Grant</option><option>Hackathon</option><option>Opportunity</option></select></label><label>Deadline<input required type='date' name='deadline'></label></div><label>Title<input required name='title'></label><div class='form-row'><label>Provider<input required name='provider'></label><label>Country / region<input required name='country' value='Global'></label></div><label>Level<input required name='level' value='Students / young builders'></label><label>Application URL<input required type='url' name='url'></label><label>Summary<textarea required name='summary' rows='4'></textarea></label><label>Tags<input name='tags' placeholder='ai,rwanda,climate'></label><button class='cta-primary' type='submit'>Post opportunity</button></form></div>
+      <h2 class='admin-group-title' id='automation'>3 · Automation &amp; imports</h2>
       <div class='dash-panel'><h2>Automatic opportunity posting</h2><p class='muted'>Imports latest RSS posts from configured opportunity sources. Admin should verify important deadlines.</p><form method='post' action='/admin/sync'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><button class='cta-primary' type='submit'>Sync opportunities now</button></form><ul class='clean-list'>{log_rows if log_rows else '<li>No syncs yet.</li>'}</ul></div>
-      <div class='dash-panel'><h2>Community submissions</h2><p class='muted'>User-submitted opportunities stay private until you approve them.</p><div class='mini-grid'>{sub_rows if sub_rows else '<p class="empty">No submissions waiting for review.</p>'}</div></div>
       <div class='dash-panel'><h2>Auto-import &amp; source links</h2><p class='muted'>Turn on auto-import to refresh saved links every 30 minutes, or fetch any link immediately.</p>{toggle_html}
         <form method='post' action='/admin/source/add' class='builder-form'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><label>Add a feed or webpage link<input name='url' type='url' placeholder='https://example.com/feed' required></label><button class='cta-primary slim' type='submit'>Save link</button></form>
         <form method='post' action='/admin/source/fetch' class='builder-form'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><label>Fetch a one-off link<input name='url' type='url' placeholder='https://example.com/opportunities' required></label><button class='ghost-button' type='submit'>Fetch now</button></form>
         <ul class='clean-list admin-source-list'>{source_rows if source_rows else '<li>No saved sources.</li>'}</ul></div>
-      <div class='dash-panel'><h2>User controls</h2><div class='table-wrap'><table><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead><tbody>{user_rows}</tbody></table></div></div>
+      <h2 class='admin-group-title' id='people'>4 · People &amp; records</h2>
+      <div class='dash-panel wide'><h2>User controls</h2><div class='table-wrap'><table><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead><tbody>{user_rows}</tbody></table></div></div>
       <div class='dash-panel'><h2>Recent projects</h2><div class='table-wrap'><table><thead><tr><th>ID</th><th>Title</th><th>Maker</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead><tbody>{project_rows}</tbody></table></div></div>
       <div class='dash-panel'><h2>Newest opportunities</h2><div class='table-wrap'><table><thead><tr><th>Type</th><th>Title</th><th>Deadline</th><th>Link</th><th>Action</th></tr></thead><tbody>{opp_rows}</tbody></table></div></div>
       <div class='dash-panel'><h2>Recent funding</h2><ul class='clean-list'>{pledge_rows if pledge_rows else '<li>No pledges yet.</li>'}</ul></div>
+      </div>
     </section>"""
     return page_shell("Admin", body, user, "admin")
 
@@ -1007,7 +1207,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
     def build_sitemap(self):
         host = self.headers.get("Host", "localhost:8080")
         base = "https://" + host if "localhost" not in host and "127.0.0.1" not in host else "http://" + host
-        urls = ["/", "/opportunities", "/marketplace", "/signup", "/login"]
+        urls = ["/", "/opportunities", "/programs", "/marketplace", "/signup", "/login"]
         items = "".join([f"<url><loc>{base}{u}</loc></url>" for u in urls])
         return "<?xml version='1.0' encoding='UTF-8'?><urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>" + items + "</urlset>"
     def redirect(self, loc, headers=None):
@@ -1047,7 +1247,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         parsed=urlparse(self.path); path=parsed.path; query=parse_qs(parsed.query); user=self.current_user()
         if path == "/robots.txt": return self.send_plain("User-agent: *\nAllow: /\nSitemap: /sitemap.xml\n", "text/plain")
         if path == "/sitemap.xml": return self.send_plain(self.build_sitemap(), "application/xml")
-        if path == "/version": return self.send_plain(f"70Scholar {APP_VERSION} - bigger brand, single-owner admin, NESA photo gallery", "text/plain")
+        if path == "/version": return self.send_plain(f"70Scholar {APP_VERSION} - featured programs, link previews, organized admin", "text/plain")
         if path.startswith("/uploads/profiles/"): return self.serve_profile_upload(path)
         if path.startswith("/static/"): return self.serve_static(path)
         if path.startswith("/uploads/profiles/"): return self.serve_profile_upload(path)
@@ -1062,6 +1262,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         if path == "/opportunities": return self.send_html(render_opportunities(user, query))
         if path == "/courses": return self.send_html(render_courses(user))
         if path == "/exams": return self.send_html(render_exams(user))
+        if path == "/programs": return self.send_html(render_programs(user))
         if path == "/submit": return self.send_html(render_submit(user))
         if path == "/dashboard":
             user=self.require_user(); return None if not user else self.send_html(render_dashboard(user))
@@ -1179,6 +1380,10 @@ class ScholarHandler(BaseHTTPRequestHandler):
             form=self.read_form()
             if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "<section class='panel-section'>CSRF check failed.</section>", user), 403)
             return self.handle_opportunity_submission(user, form)
+        if path == "/opportunity/submit-link":
+            form=self.read_form()
+            if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "CSRF check failed.", user), 403)
+            return self.handle_link_submission(user, form)
         if path == "/course/enrol":
             form=self.read_form()
             if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "<section class='panel-section'>CSRF check failed.</section>", user), 403)
@@ -1276,23 +1481,45 @@ class ScholarHandler(BaseHTTPRequestHandler):
         self.redirect(location, {"Set-Cookie":f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={14*24*60*60}"})
     def handle_signup(self, form):
         name=form.get("name","").strip(); email=form.get("email","").strip().lower(); password=form.get("password","")
-        if len(name)<2 or "@" not in email or len(password)<8: return self.send_html(render_auth("signup", "Use a real name, valid email, and password of at least 8 characters."), 400)
+        account_type=(form.get("account_type") or "").strip()[:40]
+        career=(form.get("career") or "").strip()[:120]
+        education_level=(form.get("education_level") or "").strip()[:80]
+        if account_type not in ACCOUNT_TYPES: account_type = "Other"
+        if len(name)<2 or "@" not in email or len(password)<8:
+            return self.send_html(render_auth("signup", "Please enter your name, a valid email and a password of at least 8 characters.", ""), 400)
         salt, hashed=hash_password(password)
+        verified = 0 if EMAIL_ENABLED else 1
         try:
             with db() as conn:
-                cur=conn.execute("INSERT INTO users(name,email,password_hash,salt,role,email_verified,created_at) VALUES(?,?,?,?,?,?,?)", (name,email,hashed,salt,"student",0,now_iso()))
+                cur=conn.execute("""INSERT INTO users(name,email,password_hash,salt,role,email_verified,created_at,account_type,career,education_level)
+                    VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                    (name,email,hashed,salt,"student",verified,now_iso(),account_type,career,education_level))
                 user_id=cur.lastrowid
-            send_verification_email(user_id, email, name)
-        except sqlite3.IntegrityError: return self.send_html(render_auth("signup", "That email already has an account."), 409)
+            if EMAIL_ENABLED:
+                try:
+                    send_verification_email(user_id, email, name)
+                except Exception as ex:
+                    # A misconfigured email provider must never lock a new user out.
+                    print("Verification email failed; account auto-verified:", ex, file=sys.stderr)
+                    with db() as conn:
+                        conn.execute("UPDATE users SET email_verified=1 WHERE id=?", (user_id,))
+                    verified = 1
+        except sqlite3.IntegrityError:
+            return self.send_html(render_auth("signup", "That email already has an account.", ""), 409)
+        if verified:
+            return self.send_html(render_notice("You're in", "Your account is ready. Log in to explore opportunities, courses and exam prep."))
         return self.send_html(render_notice("Check your email", "We created your account. Please verify your email address before logging in."))
     def handle_login(self, form):
         email=form.get("email","").strip().lower(); password=form.get("password","")
         with db() as conn: user=conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
         if not user or not verify_password(password, user["salt"], user["password_hash"]): return self.send_html(render_auth("login", "Incorrect email or password."), 401)
         if not user["email_verified"]:
-            try: send_verification_email(user["id"], user["email"], user["name"])
-            except Exception: pass
-            return self.send_html(render_auth("login", "Please verify your email first. We sent a new verification link."), 403)
+            if not EMAIL_ENABLED:
+                with db() as conn: conn.execute("UPDATE users SET email_verified=1 WHERE id=?", (user["id"],))
+            else:
+                try: send_verification_email(user["id"], user["email"], user["name"])
+                except Exception: pass
+                return self.send_html(render_auth("login", "Please verify your email first. We sent a new verification link.", ""), 403)
         nxt = (form.get("next") or "").strip()
         if not (nxt.startswith("/") and not nxt.startswith("//")): nxt = "/dashboard"
         return self.create_session_and_redirect(email, nxt)
@@ -1459,6 +1686,30 @@ class ScholarHandler(BaseHTTPRequestHandler):
                  url, summary, (form.get("tags") or "")[:200], "pending", now_iso()))
         return self.send_html(render_submit(user, "Submitted! The admin will review it before it goes public."))
 
+    def handle_link_submission(self, user, form):
+        url = (form.get("url") or "").strip()
+        note = (form.get("note") or "").strip()[:600]
+        if urlparse(url).scheme not in ("http", "https"):
+            return self.send_html(render_submit(user, "Please enter a valid http or https link.", "error"), 400)
+        try:
+            info = fetch_page_metadata(url)
+        except Exception as ex:
+            return self.send_html(render_submit(user, f"We couldn't read that link: {str(ex)[:160]}", "error"), 400)
+        image_url = info["image"]
+        if image_url:
+            image_url = urljoin(url, image_url)
+            if urlparse(image_url).scheme not in ("http", "https"):
+                image_url = ""
+        with db() as conn:
+            conn.execute("""INSERT INTO opportunity_submissions
+                (user_id,type,title,provider,country,level,deadline,url,summary,tags,status,created_at,source_mode,fetched_summary,fetched_image)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (user["id"], info["type"], info["title"], info["site"], "Verify on source",
+                 "See official page", info["deadline"], url, info["summary"], "link-submission",
+                 "pending", now_iso(), "link", (note + " " + info["summary"])[:900], image_url))
+        return self.send_html(render_submit(user,
+            f"Link received. We found “{info['title']}” and sent the details to the admin for review."))
+
     def handle_course_enrol(self, user, form):
         key=(form.get("course_key") or "").strip()[:160]
         kind=(form.get("kind") or "course").strip()[:20]
@@ -1473,20 +1724,26 @@ class ScholarHandler(BaseHTTPRequestHandler):
         sid=form.get("submission_id",""); action=form.get("action","")
         if not sid.isdigit() or action not in ("approve","reject"):
             return self.send_html(render_admin(user, "Invalid submission action."), 400)
+        if action == "approve" and form.get("confirmed") != "1":
+            return self.send_html(render_admin(user, "Please confirm that you checked the official page before publishing."), 400)
         with db() as conn:
             row=conn.execute("SELECT * FROM opportunity_submissions WHERE id=?", (int(sid),)).fetchone()
             if not row: return self.send_html(render_admin(user, "Submission not found."), 404)
             if action == "approve":
+                title=(form.get("title") or row["title"]).strip()[:200]
+                provider=(form.get("provider") or row["provider"]).strip()[:160]
+                deadline=(form.get("deadline") or row["deadline"]).strip()[:80]
+                summary=(form.get("summary") or row["summary"]).strip()[:1200]
                 cur=conn.execute("""INSERT OR IGNORE INTO opportunities(type,title,provider,country,level,deadline,url,summary,tags,source,created_at)
                     VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-                    (row["type"], row["title"], row["provider"], row["country"], row["level"], row["deadline"],
-                     row["url"], row["summary"], row["tags"], "community", now_iso()))
+                    (row["type"], title, provider, row["country"], row["level"], deadline,
+                     row["url"], summary, row["tags"], "community", now_iso()))
                 if cur.rowcount:
                     conn.execute("UPDATE opportunities SET auto_description=? WHERE id=?",
                         (make_auto_description({"type":row["type"],"title":row["title"],"provider":row["provider"],
-                          "country":row["country"],"level":row["level"],"deadline":row["deadline"],"summary":row["summary"]}), cur.lastrowid))
+                          "country":row["country"],"level":row["level"],"deadline":deadline,"summary":summary}), cur.lastrowid))
                 conn.execute("UPDATE opportunity_submissions SET status='approved', reviewed_at=? WHERE id=?", (now_iso(), int(sid)))
-                return self.send_html(render_admin(user, f"Approved and published: {row['title']}"))
+                return self.send_html(render_admin(user, f"Approved and published: {title}"))
             conn.execute("UPDATE opportunity_submissions SET status='rejected', reviewed_at=? WHERE id=?", (now_iso(), int(sid)))
         return self.send_html(render_admin(user, "Submission rejected."))
 

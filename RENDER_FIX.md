@@ -51,7 +51,7 @@ BIRD_REGION=us1
 
 Usually you do not need to set `PORT` manually because Render provides it. If asked, use `10000`.
 
-## v16 deployment gotchas
+## v17 deployment gotchas
 
 1. **Deploy current `main`.** Older commits contained a truncated 57-line `server.py`
    that imports but serves nothing; the current file is complete. Confirm locally with `python3 -m py_compile server.py` and
@@ -59,7 +59,7 @@ Usually you do not need to set `PORT` manually because Render provides it. If as
 2. **Push the `static/` folder.** `/static/styles.css` and `/static/app.js` must return 200;
    otherwise the site loads unstyled.
 3. **Check `/version` after deploy.** It must say
-   `70Scholar v16-features ...`.
+   `70Scholar v17-programs ...`.
 
 ## After updating GitHub
 

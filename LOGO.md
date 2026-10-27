@@ -23,7 +23,7 @@ It is a scalable SVG (vector), so it stays sharp on every screen. The wordmark
    ```
 
 3. Optionally save a square version as `static/favicon.svg` for the browser tab.
-4. Bump `APP_VERSION` in `server.py` (e.g. `v16-features` → `v17-logo`) so browsers
+4. Bump `APP_VERSION` in `server.py` (e.g. `v17-programs` → `v18-logo`) so browsers
    reload the new image instead of using the cached one.
 5. Commit and push:
 

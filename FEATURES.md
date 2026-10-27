@@ -1,4 +1,56 @@
-# 70Scholar v16 — feature guide
+# 70Scholar v17 — feature guide
+
+## v17 — programs, link previews, profiles and a cleaner admin
+
+### A. Featured programs
+`/programs` is a **public** page with 16 official programme links, including YYAS,
+YYGS, RSI, MITES Summer, SSP, Simons, QuestBridge, Mastercard Foundation, ALA,
+Chevening, Rhodes, Fulbright, Gates Cambridge, Erasmus Mundus and DAAD EPOS.
+The same records are seeded into `opportunities` with `source='featured_program'`,
+so they also appear in the main opportunity list. Dates marked **Verify deadline**
+must be confirmed on the official page because deadlines vary by country/course.
+
+Source list: `FEATURED_PROGRAMS` in `server.py`.
+
+### B. Add opportunity by link
+`/submit` now offers two options:
+
+1. **Option 1 — fill in the details** (manual form, unchanged).
+2. **Option 2 — just paste a link**: the server fetches the page's Open Graph /
+   meta title, description, site name and image, infers a type and deadline, and
+   saves a `pending` submission. The admin sees the fetched preview and an optional
+   user note, can edit the title/provider/deadline/summary, must tick **“I checked
+   the official page”**, then approves or rejects. Nothing is public before approval.
+
+Security: `is_safe_public_url()` blocks private, loopback, link-local and reserved
+addresses; redirects are rechecked; response size and time are capped. Relative
+preview images are resolved against the submitted URL and limited to http/https.
+
+### C. Profile picture, signup and helpline
+- Signed-in users now see a real profile image in the top-right navigation. An upload
+  from **Account** replaces the default `static/images/default-avatar.svg`.
+- `/signup` asks for name, email and password (compulsory) plus optional
+  “I am a…”, career/field and education level. If no email provider is configured —
+  or the provider fails — the account is auto-verified so signup never traps a user.
+- Every HTML page footer includes helpline `0726495648` and
+  `honoremukunzi6@gmail.com`.
+
+### D. Classic long-scroll homepage
+The storytelling sections remain, but the order is now: hero → typewriter →
+Discover/Build/Launch → opportunity types → featured programs → the problem →
+real photos → workspace → story/impact → extra features/FAQ → final call to action.
+
+### E. Organized admin
+`/admin` has a sticky sidebar and four numbered groups: **Review queue**,
+**Content & catalogue**, **Automation & imports**, and **People & records**.
+The community-submission queue is at the top and includes link previews.
+
+### F. Tests
+Run `python3 -m unittest discover -s tests -v` from the repository root.
+The suite covers seeded programs, the public programs page, helpline footer,
+signup fields, SSRF protection, metadata extraction, and the full
+link-submission → admin-approval → public-listing flow.
+
 
 ## 1. Logo
 `static/images/logo.svg` (header/footer) and `static/favicon.svg` (browser tab).
@@ -83,4 +135,4 @@ project page, payment instructions and admin **Platform Fund** stat all show it.
   documented in `PHOTOS.md`.
 
 ## Deploy
-Push to `main` — Render auto-deploys. Verify with `/version` → `v16-features`.
+Push to `main` — Render auto-deploys. Verify with `/version` → `v17-programs`.

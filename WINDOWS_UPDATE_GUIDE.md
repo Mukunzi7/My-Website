@@ -3,15 +3,15 @@
 On Windows, `grep` is usually unavailable. Use `findstr` (Command Prompt) or `Select-String`
 (PowerShell).
 
-## 1. Confirm you have the v16 code
+## 1. Confirm you have the v17 code
 
 From the project folder:
 
 ```bat
-findstr /C:"70Scholar v16 is live" server.py
+findstr /C:"APP_VERSION = " server.py
 ```
 
-You should see the update-banner line. Then check the supporting files exist:
+You should see the `APP_VERSION = "v17-programs"` line. Then check the supporting files exist:
 
 ```bat
 dir static
@@ -24,7 +24,7 @@ findstr /C:"10 MB" static\app.js
 PowerShell equivalents:
 
 ```powershell
-Select-String -Path server.py -Pattern "70Scholar v16 is live"
+Select-String -Path server.py -Pattern "APP_VERSION"
 Select-String -Path static\app.js -Pattern "reveal-on-scroll"
 Select-String -Path static\styles.css -Pattern "nav-profile"
 ```
@@ -41,7 +41,7 @@ py -3 server.py
 Open <http://127.0.0.1:8080> and then <http://127.0.0.1:8080/version>. You should see:
 
 ```text
-70Scholar v16-features - bigger brand, single-owner admin, NESA photo gallery
+70Scholar v17-programs - featured programs, link previews, organized admin
 ```
 
 ## 3. Push and redeploy
@@ -63,7 +63,7 @@ Open:
 https://seven0scholar-7cjc.onrender.com/version
 ```
 
-You must see the same v16 string. Also open `/static/styles.css` — it should return CSS, not a
+You must see the same v17 string. Also open `/static/styles.css` — it should return CSS, not a
 404 page.
 
 If the live site still shows an older version or looks unstyled, Render is running old code. See

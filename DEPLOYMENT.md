@@ -104,7 +104,7 @@ fly deploy
 
 ## Production checklist
 
-1. Confirm the current v16 code is on `main` (older commits had a truncated `server.py`).
+1. Confirm the current v17 code is on `main` (older commits had a truncated `server.py`).
 2. Set `ADMIN_PASSWORD`, `APP_BASE_URL`, and an email provider before the first boot.
 3. Verify `/version`, `/static/styles.css`, `/static/app.js`, `/robots.txt`, `/sitemap.xml`.
 4. Add persistent storage for SQLite and uploads, or migrate to PostgreSQL + cloud files.
