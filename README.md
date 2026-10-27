@@ -1,4 +1,4 @@
-# 70Scholar — Platform MVP v14
+# 70Scholar — Platform MVP v15
 
 **70Scholar** (previously Learnwella, originally EduBridge) is a full-stack platform by **Nexus Company Ltd** for
 opportunity discovery, student project building, sponsor conversations, project showcases,
@@ -43,28 +43,31 @@ required environment variables, persistent storage, and custom-domain setup.
 | `.env.example` | Template for every environment variable the app understands |
 | `database_postgresql.sql` | Production schema if you migrate off SQLite |
 | `pitch_deck.html`, `pitch_deck.md` | Investor/partner pitch deck |
-| `static/images/`, `PHOTOS.md` | 7 real homepage photos + attribution/replacement guide |
+| `static/images/`, `PHOTOS.md` | 7 real NESA Rwanda homepage photos + attribution/permission notes |
 
 ---
 
-## v14 changes
+## v15 changes
 
 1. **Bigger brand name** — the 70Scholar wordmark is now much larger in the header and footer,
    plus a large statement version of the name at the top of the homepage hero.
+2. **Real NESA photos** — replaced the illustrative stock gallery with seven genuine
+   photographs of Rwandan students, teachers and education officials from
+   [nesa.gov.rw](https://www.nesa.gov.rw/). See `PHOTOS.md` for sources and permission notes.
 2. **Single-owner admin** — admin access is locked to one allowlisted email
    (`honoremukunzi6@gmail.com`). No other account can be promoted, and any other admin row is
    downgraded at startup. See `ADMIN_EMAIL_ALLOWLIST` in `server.py`.
 3. **7-photo homepage gallery** — real (non-AI) student/scholar photographs in
    `static/images/`, with captions, lazy loading, and responsive layout. Sources and
    replacement instructions are in `PHOTOS.md`.
-4. **`APP_VERSION` bumped to `v14-70scholar-gallery-brand`** for cache-busting and `/version`
+4. **`APP_VERSION` bumped to `v15-nesa-photos`** for cache-busting and `/version`
    checks.
 
 ## v13 changes
 
 1. **Renamed the platform to 70Scholar** — page titles, SVG wordmark, footer, page copy,
    verification and password-reset emails, `/version`, the pitch deck, and all documentation.
-2. **Bumped `APP_VERSION` to `v14-70scholar-gallery-brand`** so `/version` proves which build is live
+2. **Bumped `APP_VERSION` to `v15-nesa-photos`** so `/version` proves which build is live
    and browser caches pick up the new CSS/JS.
 3. **Renamed the Render service to `70scholar`** in `render.yaml`, so the free URL is
    `https://seven0scholar-7cjc.onrender.com`. This requires starting a fresh Blueprint flow; see
@@ -106,7 +109,7 @@ Verify what is running:
 
 ```text
 http://127.0.0.1:8080/version
-→ 70Scholar v14-70scholar-gallery-brand - bigger brand, single-owner admin, 7-photo gallery
+→ 70Scholar v15-nesa-photos - bigger brand, single-owner admin, NESA photo gallery
 ```
 
 ---

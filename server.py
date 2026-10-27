@@ -20,7 +20,7 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 APP_NAME = "70Scholar"
-APP_VERSION = "v14-70scholar-gallery-brand"
+APP_VERSION = "v15-nesa-photos"
 COMPANY_NAME = "Nexus Company Ltd"
 APP_TAGLINE = "Find the opportunity. Show the build. Start the conversation."
 OWNER_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "honoremukunzi6@gmail.com").strip().lower()
@@ -296,23 +296,30 @@ def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: s
         nav_auth = f"""<a class="nav-link {'is-active' if active=='dashboard' else ''}" href="/dashboard">Dashboard</a><a class="nav-link {'is-active' if active=='workspace' else ''}" href="/workspace">Workspace</a><a class="nav-link {'is-active' if active=='messages' else ''}" href="/messages">Messages</a><a class="nav-link {'is-active' if active=='account' else ''}" href="/account">Account</a>{admin_link}{profile_link}<form class="logout-form" action="/logout" method="post"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><button>Log out</button></form>"""
     else:
         nav_auth = "<a class='nav-link' href='/login'>Log in</a><a class='pill small' href='/signup'>Create account</a>"
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><div class="update-banner"><strong>70Scholar v14 is live:</strong> bigger brand, one-owner admin, and a real student photo gallery. <a href="/version">Check version</a></div><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p><p class="copyright">© {datetime.now(timezone.utc).year} {COMPANY_NAME}. All rights reserved.</p></footer><script src="/static/app.js?v={APP_VERSION}"></script></body></html>"""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><div class="update-banner"><strong>70Scholar v15 is live:</strong> bigger brand, one-owner admin, and real photos from NESA Rwanda. <a href="/version">Check version</a></div><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p><p class="copyright">© {datetime.now(timezone.utc).year} {COMPANY_NAME}. All rights reserved.</p></footer><script src="/static/app.js?v={APP_VERSION}"></script></body></html>"""
 
 HOMEPAGE_PHOTOS = [
-    {"file": "students-classroom.jpg", "alt": "Students following a lesson together in a classroom",
-     "caption": "Students in class", "note": "The next generation of builders"},
-    {"file": "isomo-academy.jpg", "alt": "A scholar working with classmates around a table",
-     "caption": "Isomo Academy scholars", "note": "Learning together"},
-    {"file": "yale-scholars.jpg", "alt": "University scholars walking across a campus",
-     "caption": "Yale scholars", "note": "Global academic ambition"},
-    {"file": "escm-students.jpg", "alt": "ESCM students studying together in a library",
-     "caption": "ESCM students", "note": "Focused on what comes next"},
-    {"file": "education-leader.jpg", "alt": "An education leader speaking with a student in a classroom",
-     "caption": "Education leadership & students", "note": "Leaders who listen to learners"},
-    {"file": "focused-scholar.jpg", "alt": "A focused scholar holding books on a university campus",
-     "caption": "Focused scholars", "note": "Every opportunity starts here", "w": 1200, "h": 1800},
-    {"file": "graduation.jpg", "alt": "Graduates celebrating at a university ceremony",
-     "caption": "Graduation day", "note": "Where the path leads"},
+    {"file": "students-library.jpg", "w": 1200, "h": 801,
+     "alt": "Rwandan students studying together in a school library",
+     "caption": "Rwanda's students", "note": "Learning side by side"},
+    {"file": "students-classroom.jpg", "w": 1200, "h": 801,
+     "alt": "A classroom of Rwandan students in school uniform",
+     "caption": "In the classroom", "note": "Where futures begin"},
+    {"file": "student-chalkboard.jpg", "w": 1200, "h": 801,
+     "alt": "A Rwandan student writing at the chalkboard",
+     "caption": "Every scholar has a voice", "note": "Confidence to step forward"},
+    {"file": "students-collaborating.jpg", "w": 1200, "h": 801,
+     "alt": "Students collaborating around a table in a school library",
+     "caption": "Learning together", "note": "Peers who push each other"},
+    {"file": "teacher-and-students.jpg", "w": 1200, "h": 801,
+     "alt": "A teacher leading a Rwandan class at the chalkboard",
+     "caption": "Teachers who open doors", "note": "Guidance that lasts"},
+    {"file": "official-with-student.jpg", "w": 1000, "h": 785,
+     "alt": "An education official handing an exam paper to a young student",
+     "caption": "Leaders investing in learners", "note": "Education as a national priority"},
+    {"file": "education-leaders.jpg", "w": 1200, "h": 640,
+     "alt": "Rwandan education leaders launching national examination results",
+     "caption": "National commitment", "note": "Building a system that works"},
 ]
 
 def render_photo_gallery() -> str:
@@ -327,13 +334,13 @@ def render_photo_gallery() -> str:
       <div class="gallery-inner">
         <p class="eyebrow eyebrow-dark">The people behind the mission</p>
         <h2>Real students. Real scholars. Real futures.</h2>
-        <p class="gallery-intro">From Isomo Academy and ESCM to Yale and Rwanda's education leaders,
-        70Scholar exists for the students who keep building even when the path is unclear.</p>
+        <p class="gallery-intro">Real students, teachers and education leaders from Rwanda —
+        the community 70Scholar is built to serve.</p>
         <div class="gallery-grid">{cards}</div>
-        <p class="gallery-credit">These are real (non-AI) illustrative stock photographs from
-        Pexels — they are <strong>not</strong> photographs of the named institutions or people.
-        Replace them with your own authorised community photos. See <code>PHOTOS.md</code>
-        for sources and instructions.</p>
+        <p class="gallery-credit">Real, non-AI photographs sourced from the
+        <a href="https://www.nesa.gov.rw/" target="_blank" rel="noopener">National Examination
+        and School Inspection Authority (NESA), Rwanda</a>. See <code>PHOTOS.md</code> for
+        sources and attribution.</p>
       </div>
     </section>"""
 
@@ -709,7 +716,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         parsed=urlparse(self.path); path=parsed.path; query=parse_qs(parsed.query); user=self.current_user()
         if path == "/robots.txt": return self.send_plain("User-agent: *\nAllow: /\nSitemap: /sitemap.xml\n", "text/plain")
         if path == "/sitemap.xml": return self.send_plain(self.build_sitemap(), "application/xml")
-        if path == "/version": return self.send_plain(f"70Scholar {APP_VERSION} - bigger brand, single-owner admin, 7-photo gallery", "text/plain")
+        if path == "/version": return self.send_plain(f"70Scholar {APP_VERSION} - bigger brand, single-owner admin, NESA photo gallery", "text/plain")
         if path.startswith("/uploads/profiles/"): return self.serve_profile_upload(path)
         if path.startswith("/static/"): return self.serve_static(path)
         if path == "/download": return self.serve_download(query, user)

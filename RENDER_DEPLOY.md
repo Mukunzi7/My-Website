@@ -1,6 +1,6 @@
 # Deploy 70Scholar to Render
 
-This is the shortest path from the v14 code in this repo to a live public URL. Render reads the
+This is the shortest path from the v15 code in this repo to a live public URL. Render reads the
 `render.yaml` Blueprint in the repo root, so most settings are already filled in.
 
 > **Order matters:** any push to `main` triggers an automatic redeploy, so finish code
@@ -10,7 +10,7 @@ This is the shortest path from the v14 code in this repo to a live public URL. R
 
 ## 0. Confirm the code is on GitHub — already done
 
-The v14 code (full `server.py`, `static/`, 70Scholar branding, `render.yaml`) is already
+The v15 code (full `server.py`, `static/`, 70Scholar branding, `render.yaml`) is already
 pushed to `main` on <https://github.com/Mukunzi7/My-Website>. Nothing to do here.
 
 The deploy button always builds whatever is on `main` at the moment you click it, so if you
@@ -151,7 +151,7 @@ either way — a disk is not a backup.
 | Check | Expected |
 | --- | --- |
 | `https://seven0scholar-7cjc.onrender.com/` | Styled 70Scholar landing page (dark hero, gold buttons) |
-| `…/version` | `70Scholar v14-70scholar-gallery-brand - bigger brand, single-owner admin, 7-photo gallery` |
+| `…/version` | `70Scholar v15-nesa-photos - bigger brand, single-owner admin, NESA photo gallery` |
 | `…/static/styles.css` | 200, CSS text (if 404, the `static/` folder wasn't pushed) |
 | `…/static/app.js` | 200, JS text |
 | `…/opportunities` | Directory with seeded listings |
