@@ -20,10 +20,13 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 APP_NAME = "70Scholar"
-APP_VERSION = "v13-70scholar-brand"
+APP_VERSION = "v14-70scholar-gallery-brand"
 COMPANY_NAME = "Nexus Company Ltd"
 APP_TAGLINE = "Find the opportunity. Show the build. Start the conversation."
 OWNER_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "honoremukunzi6@gmail.com").strip().lower()
+ADMIN_EMAIL_ALLOWLIST = ("honoremukunzi6@gmail.com",)
+if OWNER_ADMIN_EMAIL not in ADMIN_EMAIL_ALLOWLIST:
+    OWNER_ADMIN_EMAIL = ADMIN_EMAIL_ALLOWLIST[0]
 SESSION_COOKIE = "edubridge_session"
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", "0"))  # 0 means no 70Scholar app limit for project/media uploads
 
@@ -262,6 +265,8 @@ def init_db() -> None:
             conn.execute("UPDATE users SET role='admin', email_verified=1 WHERE email=?", (admin_email,))
         # Only the configured owner email may remain admin. Others are downgraded.
         conn.execute("UPDATE users SET role='maker' WHERE role='admin' AND lower(email)<>lower(?)", (admin_email,))
+        # Defense in depth: no account outside the allowlist can keep admin role.
+        conn.execute("UPDATE users SET role='maker' WHERE role='admin' AND lower(email) NOT IN (%s)" % ",".join("?"*len(ADMIN_EMAIL_ALLOWLIST)), ADMIN_EMAIL_ALLOWLIST)
 
 def deadline_badge(deadline: str) -> str:
     try:
@@ -287,11 +292,50 @@ def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: s
             initials = ''.join([part[0].upper() for part in user['name'].split()[:2]]) or 'U'
             avatar = f"<span>{e(initials)}</span>"
         profile_link = f"<a class='nav-profile {'is-active' if active=='account' else ''}' href='/account' title='Account settings'>{avatar}</a>"
-        admin_link = f"<a class='nav-link {'is-active' if active=='admin' else ''}' href='/admin'>Admin</a>" if user['role']=='admin' else ''
+        admin_link = f"<a class='nav-link {'is-active' if active=='admin' else ''}' href='/admin'>Admin</a>" if is_admin(user) else ''
         nav_auth = f"""<a class="nav-link {'is-active' if active=='dashboard' else ''}" href="/dashboard">Dashboard</a><a class="nav-link {'is-active' if active=='workspace' else ''}" href="/workspace">Workspace</a><a class="nav-link {'is-active' if active=='messages' else ''}" href="/messages">Messages</a><a class="nav-link {'is-active' if active=='account' else ''}" href="/account">Account</a>{admin_link}{profile_link}<form class="logout-form" action="/logout" method="post"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><button>Log out</button></form>"""
     else:
         nav_auth = "<a class='nav-link' href='/login'>Log in</a><a class='pill small' href='/signup'>Create account</a>"
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><div class="update-banner"><strong>70Scholar v13 is live:</strong> full app restored, brand aligned, styling added, and ready for Render. <a href="/version">Check version</a></div><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p><p class="copyright">© {datetime.now(timezone.utc).year} {COMPANY_NAME}. All rights reserved.</p></footer><script src="/static/app.js?v={APP_VERSION}"></script></body></html>"""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><div class="update-banner"><strong>70Scholar v14 is live:</strong> bigger brand, one-owner admin, and a real student photo gallery. <a href="/version">Check version</a></div><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p><p class="copyright">© {datetime.now(timezone.utc).year} {COMPANY_NAME}. All rights reserved.</p></footer><script src="/static/app.js?v={APP_VERSION}"></script></body></html>"""
+
+HOMEPAGE_PHOTOS = [
+    {"file": "students-classroom.jpg", "alt": "Students following a lesson together in a classroom",
+     "caption": "Students in class", "note": "The next generation of builders"},
+    {"file": "isomo-academy.jpg", "alt": "A scholar working with classmates around a table",
+     "caption": "Isomo Academy scholars", "note": "Learning together"},
+    {"file": "yale-scholars.jpg", "alt": "University scholars walking across a campus",
+     "caption": "Yale scholars", "note": "Global academic ambition"},
+    {"file": "escm-students.jpg", "alt": "ESCM students studying together in a library",
+     "caption": "ESCM students", "note": "Focused on what comes next"},
+    {"file": "education-leader.jpg", "alt": "An education leader speaking with a student in a classroom",
+     "caption": "Education leadership & students", "note": "Leaders who listen to learners"},
+    {"file": "focused-scholar.jpg", "alt": "A focused scholar holding books on a university campus",
+     "caption": "Focused scholars", "note": "Every opportunity starts here"},
+    {"file": "graduation.jpg", "alt": "Graduates celebrating at a university ceremony",
+     "caption": "Graduation day", "note": "Where the path leads"},
+]
+
+def render_photo_gallery() -> str:
+    cards = "".join([
+        f"""<figure class="gallery-card">
+          <img src="/static/images/{e(photo['file'])}?v={APP_VERSION}" alt="{e(photo['alt'])}"
+               loading="lazy" decoding="async" width="1200" height="800">
+          <figcaption><strong>{e(photo['caption'])}</strong><span>{e(photo['note'])}</span></figcaption>
+        </figure>""" for photo in HOMEPAGE_PHOTOS
+    ])
+    return f"""<section class="photo-gallery" id="community">
+      <div class="gallery-inner">
+        <p class="eyebrow eyebrow-dark">The people behind the mission</p>
+        <h2>Real students. Real scholars. Real futures.</h2>
+        <p class="gallery-intro">From Isomo Academy and ESCM to Yale and Rwanda's education leaders,
+        70Scholar exists for the students who keep building even when the path is unclear.</p>
+        <div class="gallery-grid">{cards}</div>
+        <p class="gallery-credit">These are real (non-AI) illustrative stock photographs from
+        Pexels — they are <strong>not</strong> photographs of the named institutions or people.
+        Replace them with your own authorised community photos. See <code>PHOTOS.md</code>
+        for sources and instructions.</p>
+      </div>
+    </section>"""
 
 def render_home(user):
     with db() as conn:
@@ -301,7 +345,7 @@ def render_home(user):
             "pledged": conn.execute("SELECT COALESCE(SUM(amount),0) c FROM pledges").fetchone()["c"],
         }
     story_section = f'''<section class="story-section"><div class="story-inner"><p class="eyebrow eyebrow-dark">The story 70Scholar is building</p><h2>A path for the student who almost gave up searching.</h2><p>70Scholar was created for students who keep asking, "Where are the scholarships, internships, competitions, sponsors, and people who will believe in my project?" The goal is to make answers easier to find, applications easier to prepare, and student projects easier to support.</p><p>As more students use 70Scholar, this section will grow into a verified wall of wins: scholarships found, internships applied for, jobs reached, sponsors connected, and projects funded. We will count real success only when students confirm it — because trust matters.</p><div class="impact-stats"><div><strong>{stats['opportunities']}</strong><span>opportunities currently listed</span></div><div><strong>{stats['projects']}</strong><span>student projects published</span></div><div><strong>{money(stats['pledged'])}</strong><span>pledges recorded for builders</span></div></div></div></section>'''
-    body = '''<section class="hero" id="hero"><div class="hero-bg-beyond" aria-hidden="true"></div><div class="hero-bg-now" aria-hidden="true"></div><div class="hero-content"><p class="eyebrow">Matched to your level. Built to launch.</p><h1>There's a version of your future<br>still waiting to be found.</h1><p class="subhead">70Scholar finds scholarships, internships, grants, and competitions built for where you stand — then gives you a secure workspace to build the projects that get you noticed, funded, or sold.</p><div class="hero-actions"><a href="/opportunities" class="cta-primary">See real open opportunities <span class="arrow">→</span></a><a href="/marketplace" class="cta-secondary">Fund or buy student projects</a></div><p class="hero-micro">Real listings, refreshed from trusted opportunity feeds.</p></div><div class="scroll-hint" aria-hidden="true"><span></span></div></section>''' + story_section + '''
+    body = '''<section class="hero" id="hero"><div class="hero-bg-beyond" aria-hidden="true"></div><div class="hero-bg-now" aria-hidden="true"></div><div class="hero-content"><p class="brand-display"><span class="brand-num">70</span><span class="brand-word">Scholar</span></p><p class="eyebrow">Matched to your level. Built to launch.</p><h1>There's a version of your future<br>still waiting to be found.</h1><p class="subhead">70Scholar finds scholarships, internships, grants, and competitions built for where you stand — then gives you a secure workspace to build the projects that get you noticed, funded, or sold.</p><div class="hero-actions"><a href="/opportunities" class="cta-primary">See real open opportunities <span class="arrow">→</span></a><a href="/marketplace" class="cta-secondary">Fund or buy student projects</a></div><p class="hero-micro">Real listings, refreshed from trusted opportunity feeds.</p></div><div class="scroll-hint" aria-hidden="true"><span></span></div></section>''' + story_section + render_photo_gallery() + '''
 <section class="gap-section"><p class="eyebrow eyebrow-dark">Why most students miss out</p><p class="gap-statement">Most scholarships don't go unclaimed because nobody qualified. They go unclaimed because the right student never found them — or found them too late to build something strong.</p></section>
 <section class="journey-section" id="journey"><div class="journey-header"><p class="eyebrow">The path across</p><h2>Discover. Build. Launch. Fund.</h2></div><div class="journey-path"><div class="journey-step"><span class="step-number">01</span><h3>Discover</h3><p>Browse real openings and save the ones that fit your country, field, deadline, and level.</p></div><div class="journey-step"><span class="step-number">02</span><h3>Build</h3><p>Keep drafts, pitch text, links, files, and project details in your private account so unfinished work stays safe.</p></div><div class="journey-step"><span class="step-number">03</span><h3>Launch</h3><p>Publish a project to the marketplace, attach a demo or release file, and invite buyers, donors, mentors, or funders.</p></div></div></section>
 <section class="opportunities-section"><div class="opp-header"><p class="eyebrow eyebrow-dark">What's waiting on the other side</p><h2>Every door, sorted by which one actually opens for you.</h2></div><div class="opportunity-cards feature-cards"><div class="opp-card"><div class="icon-dot">🎓</div><h3>Scholarships</h3><p>Funding matched to your field, level, and country, with deadlines you can track.</p></div><div class="opp-card"><div class="icon-dot">💼</div><h3>Internships</h3><p>Roles sized for where you actually are in school, not five-year-experience traps.</p></div><div class="opp-card"><div class="icon-dot">🏆</div><h3>Competitions & grants</h3><p>Contests and small grants your project can realistically compete for.</p></div></div></section>
@@ -491,7 +535,10 @@ def render_project_detail(user, project_id):
 
 
 def is_admin(user):
-    return bool(user and user["role"] == "admin" and user["email"].lower() == OWNER_ADMIN_EMAIL)
+    """Only the single allowlisted owner email may ever use admin features."""
+    return bool(user and user["role"] == "admin"
+                and user["email"].strip().lower() in ADMIN_EMAIL_ALLOWLIST
+                and user["email"].strip().lower() == OWNER_ADMIN_EMAIL)
 
 def infer_type(title: str) -> str:
     t = title.lower()
@@ -582,7 +629,7 @@ def render_admin(user, msg=""):
     log_rows = ''.join([f"<li><strong>{e(l['imported'])}</strong> imported from {e(l['source'])}<br><span>{e(l['message'])}</span></li>" for l in logs])
     pledge_rows = ''.join([f"<li><strong>{money(p['amount'])}</strong> for {e(p['title'])}<br><span>{e(p['name'])} · {e(p['status'])}</span></li>" for p in pledges])
     body=f"""
-    <section class='page-hero compact admin-hero'><p class='eyebrow'>Admin command center</p><h1>Manage users, opportunities, moderation, and growth.</h1><p>Review marketplace submissions, manage roles, import opportunities, and keep 70Scholar safe.</p></section>
+    <section class='page-hero compact admin-hero'><p class='eyebrow'>Admin command center</p><h1>Manage users, opportunities, moderation, and growth.</h1><p>Review marketplace submissions, manage roles, import opportunities, and keep 70Scholar safe. Admin access is restricted to <strong>{OWNER_ADMIN_EMAIL}</strong>.</p></section>
     <section class='admin-grid'>
       <div class='stats-row'>{cards}</div>
       {flash(msg,'success') if msg else ''}
@@ -662,7 +709,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         parsed=urlparse(self.path); path=parsed.path; query=parse_qs(parsed.query); user=self.current_user()
         if path == "/robots.txt": return self.send_plain("User-agent: *\nAllow: /\nSitemap: /sitemap.xml\n", "text/plain")
         if path == "/sitemap.xml": return self.send_plain(self.build_sitemap(), "application/xml")
-        if path == "/version": return self.send_plain(f"70Scholar {APP_VERSION} - full app restored, static assets included, Render-ready", "text/plain")
+        if path == "/version": return self.send_plain(f"70Scholar {APP_VERSION} - bigger brand, single-owner admin, 7-photo gallery", "text/plain")
         if path.startswith("/uploads/profiles/"): return self.serve_profile_upload(path)
         if path.startswith("/static/"): return self.serve_static(path)
         if path == "/download": return self.serve_download(query, user)
@@ -968,7 +1015,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         return self.send_html(render_admin(user, f"Project {action} action completed."))
     def handle_admin_user_role(self, user, form):
         uid=form.get("user_id",""); role=form.get("role","")
-        if not uid.isdigit() or role not in ("student","maker","moderator"):
+        if not uid.isdigit() or role not in ("student","maker","moderator") or role == "admin":
             return self.send_html(render_admin(user, "Invalid role update. Admin role is reserved for the owner account only."), 400)
         with db() as conn:
             target=conn.execute("SELECT email FROM users WHERE id=?", (int(uid),)).fetchone()

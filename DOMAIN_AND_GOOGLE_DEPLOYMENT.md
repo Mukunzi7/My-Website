@@ -15,7 +15,7 @@ names like:
 ```
 
 You do not need a domain to start. Deploy to Render first and use the free URL
-`https://70scholar.onrender.com`, then add a custom domain later.
+`https://seven0scholar-7cjc.onrender.com`, then add a custom domain later.
 
 ---
 

@@ -1,4 +1,4 @@
-# 70Scholar — Platform MVP v13
+# 70Scholar — Platform MVP v14
 
 **70Scholar** (previously Learnwella, originally EduBridge) is a full-stack platform by **Nexus Company Ltd** for
 opportunity discovery, student project building, sponsor conversations, project showcases,
@@ -18,7 +18,7 @@ Direct link: <https://render.com/deploy?repo=https://github.com/Mukunzi7/My-Webs
 2. **Blueprint Path:** leave blank — it defaults to `render.yaml` at the repo root.
 3. The preview must say **Create web service `70scholar`**. Fill the environment variables
    it asks for (see the table in [RENDER_DEPLOY.md](RENDER_DEPLOY.md)).
-4. Click **Apply**. Your site will be at <https://70scholar.onrender.com>.
+4. Click **Apply**. Your site will be at <https://seven0scholar-7cjc.onrender.com>.
 
 > If the preview still says `learnwella`, hard-refresh or reopen the deploy link in a new
 > tab — Render reads `render.yaml` when the page loads.
@@ -43,17 +43,31 @@ required environment variables, persistent storage, and custom-domain setup.
 | `.env.example` | Template for every environment variable the app understands |
 | `database_postgresql.sql` | Production schema if you migrate off SQLite |
 | `pitch_deck.html`, `pitch_deck.md` | Investor/partner pitch deck |
+| `static/images/`, `PHOTOS.md` | 7 real homepage photos + attribution/replacement guide |
 
 ---
+
+## v14 changes
+
+1. **Bigger brand name** — the 70Scholar wordmark is now much larger in the header and footer,
+   plus a large statement version of the name at the top of the homepage hero.
+2. **Single-owner admin** — admin access is locked to one allowlisted email
+   (`honoremukunzi6@gmail.com`). No other account can be promoted, and any other admin row is
+   downgraded at startup. See `ADMIN_EMAIL_ALLOWLIST` in `server.py`.
+3. **7-photo homepage gallery** — real (non-AI) student/scholar photographs in
+   `static/images/`, with captions, lazy loading, and responsive layout. Sources and
+   replacement instructions are in `PHOTOS.md`.
+4. **`APP_VERSION` bumped to `v14-70scholar-gallery-brand`** for cache-busting and `/version`
+   checks.
 
 ## v13 changes
 
 1. **Renamed the platform to 70Scholar** — page titles, SVG wordmark, footer, page copy,
    verification and password-reset emails, `/version`, the pitch deck, and all documentation.
-2. **Bumped `APP_VERSION` to `v13-70scholar-brand`** so `/version` proves which build is live
+2. **Bumped `APP_VERSION` to `v14-70scholar-gallery-brand`** so `/version` proves which build is live
    and browser caches pick up the new CSS/JS.
 3. **Renamed the Render service to `70scholar`** in `render.yaml`, so the free URL is
-   `https://70scholar.onrender.com`. This requires starting a fresh Blueprint flow; see
+   `https://seven0scholar-7cjc.onrender.com`. This requires starting a fresh Blueprint flow; see
    `RENDER_DEPLOY.md`. You can still add a custom domain such as `70scholar.com` later.
 
 ### Earlier v12 fixes (already included)
@@ -92,7 +106,7 @@ Verify what is running:
 
 ```text
 http://127.0.0.1:8080/version
-→ 70Scholar v13-70scholar-brand - full app restored, static assets included, Render-ready
+→ 70Scholar v14-70scholar-gallery-brand - bigger brand, single-owner admin, 7-photo gallery
 ```
 
 ---
@@ -105,7 +119,7 @@ Copy `.env.example` and set the values in your host's dashboard (never commit re
 | --- | --- | --- |
 | `HOST` | yes | Must be `0.0.0.0` on Render/Docker |
 | `PORT` | yes | Render supplies this (usually `10000`) |
-| `APP_BASE_URL` | yes | `https://70scholar.onrender.com` — used in verification email links |
+| `APP_BASE_URL` | yes | `https://seven0scholar-7cjc.onrender.com` — used in verification email links |
 | `ADMIN_EMAIL` | yes | Owner admin account created at startup |
 | `ADMIN_PASSWORD` | yes | **Set a strong unique value.** The code default is for local testing only. |
 | `BIRD_API_KEY` | strongly recommended | Without email, new users cannot verify their address or log in |
@@ -149,12 +163,23 @@ container**, which is invisible to your users and wiped on redeploy. Configure `
 
 ---
 
-## Admin account
+## Admin account — single owner only
 
-On first start the app creates an owner admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD`. For local
+Admin access is locked to **one** email address: `honoremukunzi6@gmail.com`. See
+`ADMIN_EMAIL_ALLOWLIST` in `server.py`.
+
+- `is_admin()` requires the admin role **and** an allowlisted email.
+- The admin nav link only appears for the allowlisted owner.
+- `/admin/*` routes return 403 for everyone else, including a manually-inserted admin row.
+- At startup, any admin row outside the allowlist is downgraded to `maker`.
+- The role form cannot grant `admin` (only `student`, `maker`, `moderator`).
+- Signup always creates `student` accounts; the owner row can't be deleted or demoted.
+
+On first start the app creates the owner admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD`. For local
 testing only, the built-in default is printed in `server.py` — **do not use it in production**.
-Set both environment variables on your host before the first deploy; changing `ADMIN_PASSWORD`
-later does not reset an already-created account, so choose it carefully.
+Set `ADMIN_PASSWORD` on your host before the first deploy; changing it later does not reset an
+already-created account, so choose it carefully. To change the locked email, edit
+`ADMIN_EMAIL_ALLOWLIST` in `server.py` — an env var alone is not enough, by design.
 
 ---
 
@@ -180,6 +205,7 @@ activity but never collects the money. See `PAYMENTS.md`.
 | `POSTGRESQL_SETUP.md` | Future PostgreSQL migration |
 | `WINDOWS_UPDATE_GUIDE.md` | Checking versions on Windows |
 | `BRAND_RENAME.md` | Brand decision record |
+| `PHOTOS.md` | Homepage gallery photo sources, licences, and how to replace images |
 
 ---
 

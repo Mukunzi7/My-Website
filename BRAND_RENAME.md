@@ -37,7 +37,7 @@ These are invisible infrastructure labels, not branding. Renaming them breaks th
 | --- | --- |
 | `edubridge.sqlite3` | Default SQLite filename; renaming would orphan existing databases |
 | `edubridge_session` | Session cookie name; renaming would log out every user |
-| `70scholar` in `render.yaml` | Render **service** name, renamed in v13. Your free URL is `https://70scholar.onrender.com`. Changing it again requires a fresh Blueprint. |
+| `70scholar` in `render.yaml` | Render **service** name, renamed in v13. Your free URL is `https://seven0scholar-7cjc.onrender.com`. Changing it again requires a fresh Blueprint. |
 | `Mukunzi7/My-Website` | GitHub repo name; renaming it would break the deploy button and clone URLs |
 
 Use `DB_PATH` to choose a new database filename. The Render service name already

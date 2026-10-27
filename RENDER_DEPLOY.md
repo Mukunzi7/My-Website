@@ -1,6 +1,6 @@
 # Deploy 70Scholar to Render
 
-This is the shortest path from the v13 code in this repo to a live public URL. Render reads the
+This is the shortest path from the v14 code in this repo to a live public URL. Render reads the
 `render.yaml` Blueprint in the repo root, so most settings are already filled in.
 
 > **Order matters:** any push to `main` triggers an automatic redeploy, so finish code
@@ -10,14 +10,14 @@ This is the shortest path from the v13 code in this repo to a live public URL. R
 
 ## 0. Confirm the code is on GitHub — already done
 
-The v13 code (full `server.py`, `static/`, 70Scholar branding, `render.yaml`) is already
+The v14 code (full `server.py`, `static/`, 70Scholar branding, `render.yaml`) is already
 pushed to `main` on <https://github.com/Mukunzi7/My-Website>. Nothing to do here.
 
 The deploy button always builds whatever is on `main` at the moment you click it, so if you
 make more changes, push them before deploying.
 
 > **Service name:** the Blueprint service is now `70scholar`, giving you the free URL
-> `https://70scholar.onrender.com`.
+> `https://seven0scholar-7cjc.onrender.com`.
 >
 > **If you already had a Blueprint screen open that said `learnwella`, abandon it.**
 > Close that tab and re-open the deploy link below — Render reads `render.yaml` fresh
@@ -46,7 +46,7 @@ make more changes, push them before deploying.
 5. Wait for the build (usually 1–3 minutes). Your site will be at:
 
    ```text
-   https://70scholar.onrender.com
+   https://seven0scholar-7cjc.onrender.com
    ```
 
    (Render appends a suffix if that name is taken — use the URL it shows in the dashboard.)
@@ -83,7 +83,7 @@ In Render: your service → **Environment** → **Add Environment Variable**.
 | --- | --- | --- |
 | `HOST` | `0.0.0.0` | Required; otherwise Render reports "No open ports detected" |
 | `PORT` | `10000` | Render injects this automatically; set it explicitly if your plan doesn't |
-| `APP_BASE_URL` | `https://70scholar.onrender.com` | Base URL used in verification emails and `sitemap.xml` (no trailing slash) |
+| `APP_BASE_URL` | `https://seven0scholar-7cjc.onrender.com` | Base URL used in verification emails and `sitemap.xml` (no trailing slash) |
 | `ADMIN_EMAIL` | your real email | Owner admin created on first boot |
 | `ADMIN_PASSWORD` | a long unique password | **Critical.** The built-in default is public in the code |
 | `BIRD_API_KEY` | `bk_…` | Sends verification / password-reset emails |
@@ -150,8 +150,8 @@ either way — a disk is not a backup.
 
 | Check | Expected |
 | --- | --- |
-| `https://70scholar.onrender.com/` | Styled 70Scholar landing page (dark hero, gold buttons) |
-| `…/version` | `70Scholar v13-70scholar-brand - full app restored, static assets included, Render-ready` |
+| `https://seven0scholar-7cjc.onrender.com/` | Styled 70Scholar landing page (dark hero, gold buttons) |
+| `…/version` | `70Scholar v14-70scholar-gallery-brand - bigger brand, single-owner admin, 7-photo gallery` |
 | `…/static/styles.css` | 200, CSS text (if 404, the `static/` folder wasn't pushed) |
 | `…/static/app.js` | 200, JS text |
 | `…/opportunities` | Directory with seeded listings |
