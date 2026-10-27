@@ -209,6 +209,94 @@
     revealTargets.forEach(function (el) { observer.observe(el); });
   }
 
+  /* ---------------------------------------------------- typewriter: write + erase */
+  var tw = $('#typewriter');
+  if (tw && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    var words = (document.documentElement.getAttribute('data-words') || '').split('|').filter(Boolean);
+    if (!words.length) {
+      words = ['Scholarships','Internships','Competitions','Pre-university courses',
+               'University exam prep','Grants','Project funding','Student applications',
+               'Mentorship','Marketplace','Research opportunities','A future you can build'];
+    }
+    var wi = 0, ci = 0, erasing = false;
+    function tick() {
+      var word = words[wi];
+      tw.textContent = erasing ? word.slice(0, ci--) : word.slice(0, ci++);
+      var delay = erasing ? 42 : 85;
+      if (!erasing && ci > word.length) { erasing = true; delay = 1500; }
+      else if (erasing && ci < 0) { erasing = false; wi = (wi + 1) % words.length; ci = 0; delay = 320; }
+      window.setTimeout(tick, delay);
+    }
+    tick();
+  } else if (tw) { tw.textContent = 'Scholarships, courses, exam prep and funding.'; }
+
+  /* ---------------------------------------------------- auto-advancing photo slideshow */
+  var show = $('#slideshow');
+  if (show) {
+    var slides = $$('.slide', show), dots = $$('.slide-dot', show), counter = $('#slideCurrent');
+    var idx = 0, timer = null, INTERVAL = 5000;
+    function go(n) {
+      idx = (n + slides.length) % slides.length;
+      slides.forEach(function (el, i) { el.classList.toggle('is-active', i === idx); });
+      dots.forEach(function (el, i) { el.classList.toggle('is-active', i === idx); });
+      if (counter) counter.textContent = String(idx + 1);
+    }
+    function play() { stop(); timer = window.setInterval(function () { go(idx + 1); }, INTERVAL); }
+    function stop() { if (timer) { window.clearInterval(timer); timer = null; } }
+    $$('.slide-nav', show).forEach(function (b) {
+      b.addEventListener('click', function () { go(idx + Number(b.getAttribute('data-dir'))); play(); });
+    });
+    dots.forEach(function (d) {
+      d.addEventListener('click', function () { go(Number(d.getAttribute('data-go'))); play(); });
+    });
+    show.addEventListener('mouseenter', stop);
+    show.addEventListener('mouseleave', play);
+    document.addEventListener('visibilitychange', function () { document.hidden ? stop() : play(); });
+    go(0); play();
+  }
+
+  /* ---------------------------------------------------- cursor-following auto description */
+  var tip = document.createElement('div');
+  tip.id = 'hoverTooltip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip);
+  function moveTip(ev) {
+    var pad = 16, w = tip.offsetWidth, h = tip.offsetHeight;
+    var x = ev.clientX + pad, y = ev.clientY + pad;
+    if (x + w > window.innerWidth - 8) x = ev.clientX - w - pad;
+    if (y + h > window.innerHeight - 8) y = ev.clientY - h - pad;
+    tip.style.left = Math.max(8, x) + 'px';
+    tip.style.top = Math.max(8, y) + 'px';
+  }
+  document.addEventListener('mouseover', function (ev) {
+    var el = ev.target.closest ? ev.target.closest('[data-tooltip]') : null;
+    if (!el) return;
+    tip.textContent = el.getAttribute('data-tooltip') || '';
+    tip.classList.add('is-visible'); moveTip(ev);
+  });
+  document.addEventListener('mousemove', function (ev) { if (tip.classList.contains('is-visible')) moveTip(ev); });
+  document.addEventListener('mouseout', function (ev) {
+    var el = ev.target.closest ? ev.target.closest('[data-tooltip]') : null;
+    if (el && (!ev.relatedTarget || !el.contains(ev.relatedTarget))) tip.classList.remove('is-visible');
+  });
+
+  /* ---------------------------------------------------- animated counters */
+  var counters = $$('[data-count]');
+  if ('IntersectionObserver' in window && counters.length) {
+    var co = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        var el = en.target, target = Number(el.getAttribute('data-count')) || 0, start = null;
+        function step(ts) {
+          if (!start) start = ts;
+          var p = Math.min(1, (ts - start) / 1200);
+          el.textContent = String(Math.round(target * (1 - Math.pow(1 - p, 3))));
+          if (p < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step); co.unobserve(el);
+      });
+    }, { threshold: .4 });
+    counters.forEach(function (c) { co.observe(c); });
+  }
+
   /* ---------------------------------------------------- sticky-header anchor offset */
   $$('section[id], div[id]').forEach(function (el) {
     el.style.scrollMarginTop = '86px';

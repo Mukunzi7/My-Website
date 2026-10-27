@@ -4,7 +4,7 @@ Run: python3 server.py  then open http://127.0.0.1:8080
 No external Python packages required.
 """
 from __future__ import annotations
-import base64, hashlib, html, json, mimetypes, os, re, secrets, sqlite3, sys, smtplib, urllib.request, xml.etree.ElementTree as ET
+import base64, hashlib, html, json, mimetypes, os, re, secrets, sqlite3, sys, smtplib, threading, time, urllib.request, xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,7 +20,7 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 APP_NAME = "70Scholar"
-APP_VERSION = "v15-nesa-photos"
+APP_VERSION = "v16-features"
 COMPANY_NAME = "Nexus Company Ltd"
 APP_TAGLINE = "Find the opportunity. Show the build. Start the conversation."
 OWNER_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "honoremukunzi6@gmail.com").strip().lower()
@@ -40,6 +40,36 @@ MOMO_INSTRUCTIONS = os.environ.get("MOMO_PAYMENT_INSTRUCTIONS", "Set MOMO_PAYMEN
 RSS_SOURCES = [
     "https://www.opportunitiesforafricans.com/feed/",
     "https://www.globalsouthopportunities.com/feed/",
+]
+# Platform commission used to sponsor other student projects.
+PLATFORM_FEE_PERCENT = float(os.environ.get("PLATFORM_FEE_PERCENT", "5"))
+# Words cycled by the homepage typewriter animation.
+TYPEWRITER_WORDS = [
+    "Scholarships", "Internships", "Competitions", "Pre-university courses",
+    "University exam prep", "Grants", "Project funding", "Student applications",
+    "Mentorship", "Marketplace", "Research opportunities", "A future you can build",
+]
+# Auto-import is stored in the DB so the owner can toggle it from /admin.
+AUTO_SYNC_INTERVAL_SECONDS = 1800
+# Pages reachable without an account. Everything else requires sign-in.
+PUBLIC_GET_PATHS = {"/", "/login", "/signup", "/verify-email", "/forgot-password",
+                    "/reset-password", "/robots.txt", "/sitemap.xml", "/version"}
+PUBLIC_POST_PATHS = {"/login", "/signup", "/forgot-password", "/reset-password"}
+PREUNI_COURSES = [
+    {"title":"Academic English for University","category":"Pre-university","level":"Secondary → University","duration":"8 weeks","summary":"Essay writing, academic reading, citation, and presentation skills for university study.","topics":["Academic vocabulary","Essay structure","Referencing","Seminar speaking"]},
+    {"title":"Foundation Mathematics","category":"Pre-university","level":"Secondary → University","duration":"10 weeks","summary":"Algebra, functions, trigonometry and introductory calculus to bridge into STEM degrees.","topics":["Algebra","Functions","Trigonometry","Limits"]},
+    {"title":"Introduction to Programming (Python)","category":"Pre-university","level":"Beginner","duration":"12 weeks","summary":"A practical first course in computational thinking and Python for future CS applicants.","topics":["Variables","Loops","Functions","Data structures"]},
+    {"title":"Study Skills & Research Methods","category":"Pre-university","level":"All levels","duration":"6 weeks","summary":"How to plan a research project, evaluate sources, manage time, and write a literature review.","topics":["Research questions","Source evaluation","Note-taking","Time management"]},
+    {"title":"Physics & Chemistry Bridge","category":"Pre-university","level":"Secondary → University","duration":"10 weeks","summary":"Core lab concepts and problem solving for engineering and health-science applicants.","topics":["Mechanics","Electricity","Stoichiometry","Lab reporting"]},
+    {"title":"University Application Masterclass","category":"Pre-university","level":"Final-year students","duration":"4 weeks","summary":"Personal statements, choosing courses, references, and building a portfolio that stands out.","topics":["Personal statement","Course selection","Portfolio","References"]},
+]
+EXAM_PREP = [
+    {"title":"SAT","category":"University entrance exam","level":"International","duration":"Self-paced","summary":"Evidence-based reading, writing and maths for US undergraduate applications.","topics":["Reading","Writing & Language","Math","Practice tests"]},
+    {"title":"ACT","category":"University entrance exam","level":"International","duration":"Self-paced","summary":"English, mathematics, reading and science reasoning practice for US admissions.","topics":["English","Math","Reading","Science"]},
+    {"title":"IELTS / TOEFL","category":"English proficiency","level":"International","duration":"6–12 weeks","summary":"Listening, reading, writing and speaking preparation for English-taught universities.","topics":["Listening","Reading","Writing","Speaking"]},
+    {"title":"AP / IB / A-Level revision","category":"School-leaving exams","level":"Secondary","duration":"Term-based","summary":"Structured revision plans, past papers and marking-scheme practice.","topics":["Past papers","Revision plan","Exam technique","Mark schemes"]},
+    {"title":"University aptitude & entrance tests","category":"Admissions test","level":"Varies","duration":"8 weeks","summary":"Problem solving, critical thinking and timed practice for competitive programmes.","topics":["Critical thinking","Numerical reasoning","Timed practice","Mock exams"]},
+    {"title":"Scholarship aptitude tests","category":"Scholarship selection","level":"Varies","duration":"6 weeks","summary":"Quantitative and verbal reasoning practice common in scholarship screening tests.","topics":["Quantitative reasoning","Verbal reasoning","Essay writing","Interviews"]},
 ]
 
 APP_BASE_URL = os.environ.get("APP_BASE_URL", f"http://{HOST}:{PORT}").rstrip("/")
@@ -226,7 +256,11 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS sync_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,source TEXT NOT NULL,imported INTEGER NOT NULL DEFAULT 0,message TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS email_tokens(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,token_hash TEXT NOT NULL UNIQUE,purpose TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,used_at TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS moderation_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,admin_id INTEGER REFERENCES users(id) ON DELETE SET NULL,action TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS project_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,name TEXT NOT NULL,email TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL);''')
+        CREATE TABLE IF NOT EXISTS project_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,name TEXT NOT NULL,email TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS feed_sources(id INTEGER PRIMARY KEY AUTOINCREMENT,url TEXT NOT NULL UNIQUE,added_at TEXT NOT NULL,last_fetched TEXT NOT NULL DEFAULT '',enabled INTEGER NOT NULL DEFAULT 1);
+        CREATE TABLE IF NOT EXISTS opportunity_submissions(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,type TEXT NOT NULL,title TEXT NOT NULL,provider TEXT NOT NULL,country TEXT NOT NULL,level TEXT NOT NULL,deadline TEXT NOT NULL,url TEXT NOT NULL,summary TEXT NOT NULL,tags TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,reviewed_at TEXT NOT NULL DEFAULT '');
+        CREATE TABLE IF NOT EXISTS course_enrolments(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,course_key TEXT NOT NULL,kind TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(user_id,course_key,kind));''')
         # Lightweight migrations for older local SQLite files.
         for col, ddl in {
             "mobile_money_name": "ALTER TABLE projects ADD COLUMN mobile_money_name TEXT NOT NULL DEFAULT ''",
@@ -236,6 +270,9 @@ def init_db() -> None:
             "email_verified": "ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0",
             "profile_photo_url": "ALTER TABLE users ADD COLUMN profile_photo_url TEXT NOT NULL DEFAULT ''",
             "external_url": "ALTER TABLE assets ADD COLUMN external_url TEXT NOT NULL DEFAULT ''",
+            "platform_fee": "ALTER TABLE pledges ADD COLUMN platform_fee REAL NOT NULL DEFAULT 0",
+            "creator_amount": "ALTER TABLE pledges ADD COLUMN creator_amount REAL NOT NULL DEFAULT 0",
+            "auto_description": "ALTER TABLE opportunities ADD COLUMN auto_description TEXT NOT NULL DEFAULT ''",
         }.items():
             try:
                 conn.execute(ddl)
@@ -267,6 +304,130 @@ def init_db() -> None:
         conn.execute("UPDATE users SET role='maker' WHERE role='admin' AND lower(email)<>lower(?)", (admin_email,))
         # Defense in depth: no account outside the allowlist can keep admin role.
         conn.execute("UPDATE users SET role='maker' WHERE role='admin' AND lower(email) NOT IN (%s)" % ",".join("?"*len(ADMIN_EMAIL_ALLOWLIST)), ADMIN_EMAIL_ALLOWLIST)
+        conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('auto_sync','0')")
+        conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('platform_fund','0')")
+        for src in RSS_SOURCES:
+            conn.execute("INSERT OR IGNORE INTO feed_sources(url,added_at) VALUES(?,?)", (src, now_iso()))
+        # Backfill auto-generated descriptions for seeded opportunities.
+        for row in conn.execute("SELECT id,type,title,provider,country,level,deadline,summary,auto_description FROM opportunities WHERE auto_description=''").fetchall():
+            conn.execute("UPDATE opportunities SET auto_description=? WHERE id=?", (make_auto_description(row), row["id"]))
+
+def get_setting(key: str, default: str = "") -> str:
+    with db() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else default
+
+def set_setting(key: str, value: str) -> None:
+    with db() as conn:
+        conn.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+
+def make_auto_description(row) -> str:
+    """Build a rich hover description from whatever fields exist."""
+    typ = (row["type"] if "type" in row.keys() else "Opportunity") or "Opportunity"
+    title = row["title"] or "Opportunity"
+    provider = (row["provider"] if "provider" in row.keys() else "") or "Provider to verify"
+    country = (row["country"] if "country" in row.keys() else "") or "Global / verify"
+    level = (row["level"] if "level" in row.keys() else "") or "Students"
+    deadline = (row["deadline"] if "deadline" in row.keys() else "") or "See official page"
+    summary = (row["summary"] if "summary" in row.keys() else "") or ""
+    bits = [f"{title} — a {typ.lower()} opportunity from {provider}.",
+            f"Eligible level: {level}. Location: {country}. Deadline: {deadline}."]
+    if summary: bits.append(summary.strip())
+    bits.append("Hover for details; always confirm dates and eligibility on the official page before applying.")
+    return " ".join(bits)
+
+def fetch_feed_items(url: str, timeout: int = 10) -> list[dict]:
+    """Fetch RSS/Atom or a plain HTML page and return candidate opportunities."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("Only http and https links are supported.")
+    req = urllib.request.Request(url, headers={"User-Agent": "70ScholarBot/1.0 (+https://www.nesa.gov.rw/)"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read(2_000_000)
+        ctype = (resp.headers.get("Content-Type") or "").lower()
+    text = raw.decode("utf-8", errors="replace")
+    items = []
+    if "xml" in ctype or text.lstrip().startswith("<?xml") or "<rss" in text[:600] or "<feed" in text[:600]:
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError:
+            root = None
+        if root is not None:
+            nodes = root.findall(".//item") + root.findall(".//{http://www.w3.org/2005/Atom}entry")
+            for n in nodes[:40]:
+                def txt(*names):
+                    for name in names:
+                        v = n.findtext(name)
+                        if v: return v.strip()
+                    return ""
+                title = strip_tags(txt("title", "{http://www.w3.org/2005/Atom}title"))
+                link = txt("link")
+                if not link:
+                    le = n.find("{http://www.w3.org/2005/Atom}link")
+                    link = le.get("href", "") if le is not None else ""
+                desc = strip_tags(txt("description", "summary", "{http://www.w3.org/2005/Atom}summary"))
+                if title:
+                    items.append({"title": title[:200], "url": (link or url)[:500], "summary": desc[:600]})
+    if not items:
+        # Basic HTML link extraction for pages that are not feeds.
+        for m in re.finditer(r'<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', text, re.I | re.S):
+            href, label = m.group(1), strip_tags(m.group(2))
+            if len(label) < 12 or href.startswith(("#", "javascript:", "mailto:")):
+                continue
+            if href.startswith("/"):
+                href = f"{parsed.scheme}://{parsed.netloc}{href}"
+            elif not href.startswith("http"):
+                continue
+            if re.search(r"scholar|grant|intern|compet|fellow|award|program|applic|bursar|fund", label, re.I):
+                items.append({"title": label[:200], "url": href[:500], "summary": f"Found on {parsed.netloc}. Verify details on the source page."})
+            if len(items) >= 30: break
+    return items
+
+def import_feed_items(items: list[dict], source: str) -> int:
+    added = 0
+    with db() as conn:
+        for it in items:
+            title = (it.get("title") or "").strip()
+            link = (it.get("url") or source).strip()
+            if not title or len(title) < 8: continue
+            desc = (it.get("summary") or "").strip() or "Auto-imported listing. Verify eligibility and deadline on the source page."
+            typ = infer_type(title)
+            deadline = infer_deadline(title + " " + desc)
+            provider = urlparse(link).netloc.replace("www.", "") or "Community source"
+            desc_full = desc + f" Source: {provider}."
+            cur = conn.execute("INSERT OR IGNORE INTO opportunities(type,title,provider,country,level,deadline,url,summary,tags,source,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                               (typ, title, provider, "Global / verify", "Students, youth, builders", deadline, link, desc[:600], "auto", source, now_iso()))
+            if cur.rowcount:
+                added += 1
+                conn.execute("UPDATE opportunities SET auto_description=? WHERE id=?", (make_auto_description({"type":typ,"title":title,"provider":provider,"country":"Global / verify","level":"Students, youth, builders","deadline":deadline,"summary":desc}), cur.lastrowid))
+        conn.execute("INSERT INTO sync_logs(source,imported,message,created_at) VALUES(?,?,?,?)", (source, added, "OK", now_iso()))
+    return added
+
+def run_auto_sync() -> tuple[int, list[str]]:
+    """Import from all enabled saved links. Called by the toggle and background worker."""
+    total = 0; notes = []
+    with db() as conn:
+        sources = [r["url"] for r in conn.execute("SELECT url FROM feed_sources WHERE enabled=1").fetchall()]
+    for src in sources:
+        try:
+            n = import_feed_items(fetch_feed_items(src), src)
+            total += n; notes.append(f"{n} from {src}")
+        except Exception as ex:
+            notes.append(f"failed {src}: {str(ex)[:80]}")
+    return total, notes
+
+def auto_sync_worker() -> None:
+    """Background loop: while auto_sync is ON, refresh saved links periodically."""
+    while True:
+        time.sleep(60)
+        try:
+            if get_setting("auto_sync", "0") != "1": continue
+            last = float(get_setting("auto_sync_last", "0") or 0)
+            if time.time() - last < AUTO_SYNC_INTERVAL_SECONDS: continue
+            run_auto_sync()
+            set_setting("auto_sync_last", str(time.time()))
+        except Exception as ex:
+            print("auto-sync error:", ex, file=sys.stderr)
 
 def deadline_badge(deadline: str) -> str:
     try:
@@ -281,7 +442,8 @@ def flash(message: str, kind: str = "info") -> str:
     return f"<div class='flash {e(kind)}'>{e(message)}</div>" if message else ""
 
 def brand_logo() -> str:
-    return f"""<span class='logo-mark' aria-hidden='true'><svg viewBox='0 0 44 44' role='img'><defs><linearGradient id='s70-g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#F2A93E'/><stop offset='1' stop-color='#E8768A'/></linearGradient></defs><rect x='3' y='3' width='38' height='38' rx='12' fill='url(#s70-g)'/><path d='M14 13h17M14 22h13M14 31h17' fill='none' stroke='#10152B' stroke-width='4' stroke-linecap='round'/></svg></span><span class='logo-text'><span class='logo-first'>70</span><span class='logo-last'>Scholar</span></span>"""
+    return f"""<img class="logo-img" src="/static/images/logo.svg?v={APP_VERSION}" alt="70Scholar logo" width="68" height="68"><span class='logo-text'><span class='logo-first'>70</span><span class='logo-last'>Scholar</span></span>"""
+
 
 def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: str = "") -> str:
     logo = brand_logo()
@@ -293,10 +455,10 @@ def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: s
             avatar = f"<span>{e(initials)}</span>"
         profile_link = f"<a class='nav-profile {'is-active' if active=='account' else ''}' href='/account' title='Account settings'>{avatar}</a>"
         admin_link = f"<a class='nav-link {'is-active' if active=='admin' else ''}' href='/admin'>Admin</a>" if is_admin(user) else ''
-        nav_auth = f"""<a class="nav-link {'is-active' if active=='dashboard' else ''}" href="/dashboard">Dashboard</a><a class="nav-link {'is-active' if active=='workspace' else ''}" href="/workspace">Workspace</a><a class="nav-link {'is-active' if active=='messages' else ''}" href="/messages">Messages</a><a class="nav-link {'is-active' if active=='account' else ''}" href="/account">Account</a>{admin_link}{profile_link}<form class="logout-form" action="/logout" method="post"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><button>Log out</button></form>"""
+        nav_auth = f"""<a class="nav-link {'is-active' if active=='dashboard' else ''}" href="/dashboard">Dashboard</a><a class="nav-link {'is-active' if active=='workspace' else ''}" href="/workspace">Workspace</a><a class="nav-link {'is-active' if active=='messages' else ''}" href="/messages">Messages</a><a class="nav-link {'is-active' if active=='submit' else ''}" href="/submit">Add opportunity</a><a class="nav-link {'is-active' if active=='account' else ''}" href="/account">Account</a>{admin_link}{profile_link}<form class="logout-form" action="/logout" method="post"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><button>Log out</button></form>"""
     else:
         nav_auth = "<a class='nav-link' href='/login'>Log in</a><a class='pill small' href='/signup'>Create account</a>"
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><div class="update-banner"><strong>70Scholar v15 is live:</strong> bigger brand, one-owner admin, and real photos from NESA Rwanda. <a href="/version">Check version</a></div><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p><p class="copyright">© {datetime.now(timezone.utc).year} {COMPANY_NAME}. All rights reserved.</p></footer><script src="/static/app.js?v={APP_VERSION}"></script></body></html>"""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v={APP_VERSION}"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='courses' else ''}" href="/courses">Courses</a><a class="nav-link {'is-active' if active=='exams' else ''}" href="/exams">Exam prep</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p><p class="copyright">© {datetime.now(timezone.utc).year} {COMPANY_NAME}. All rights reserved.</p></footer><script src="/static/app.js?v={APP_VERSION}"></script></body></html>"""
 
 HOMEPAGE_PHOTOS = [
     {"file": "students-library.jpg", "w": 1200, "h": 801,
@@ -337,10 +499,6 @@ def render_photo_gallery() -> str:
         <p class="gallery-intro">Real students, teachers and education leaders from Rwanda —
         the community 70Scholar is built to serve.</p>
         <div class="gallery-grid">{cards}</div>
-        <p class="gallery-credit">Real, non-AI photographs sourced from the
-        <a href="https://www.nesa.gov.rw/" target="_blank" rel="noopener">National Examination
-        and School Inspection Authority (NESA), Rwanda</a>. See <code>PHOTOS.md</code> for
-        sources and attribution.</p>
       </div>
     </section>"""
 
@@ -352,7 +510,7 @@ def render_home(user):
             "pledged": conn.execute("SELECT COALESCE(SUM(amount),0) c FROM pledges").fetchone()["c"],
         }
     story_section = f'''<section class="story-section"><div class="story-inner"><p class="eyebrow eyebrow-dark">The story 70Scholar is building</p><h2>A path for the student who almost gave up searching.</h2><p>70Scholar was created for students who keep asking, "Where are the scholarships, internships, competitions, sponsors, and people who will believe in my project?" The goal is to make answers easier to find, applications easier to prepare, and student projects easier to support.</p><p>As more students use 70Scholar, this section will grow into a verified wall of wins: scholarships found, internships applied for, jobs reached, sponsors connected, and projects funded. We will count real success only when students confirm it — because trust matters.</p><div class="impact-stats"><div><strong>{stats['opportunities']}</strong><span>opportunities currently listed</span></div><div><strong>{stats['projects']}</strong><span>student projects published</span></div><div><strong>{money(stats['pledged'])}</strong><span>pledges recorded for builders</span></div></div></div></section>'''
-    body = '''<section class="hero" id="hero"><div class="hero-bg-beyond" aria-hidden="true"></div><div class="hero-bg-now" aria-hidden="true"></div><div class="hero-content"><p class="brand-display"><span class="brand-num">70</span><span class="brand-word">Scholar</span></p><p class="eyebrow">Matched to your level. Built to launch.</p><h1>There's a version of your future<br>still waiting to be found.</h1><p class="subhead">70Scholar finds scholarships, internships, grants, and competitions built for where you stand — then gives you a secure workspace to build the projects that get you noticed, funded, or sold.</p><div class="hero-actions"><a href="/opportunities" class="cta-primary">See real open opportunities <span class="arrow">→</span></a><a href="/marketplace" class="cta-secondary">Fund or buy student projects</a></div><p class="hero-micro">Real listings, refreshed from trusted opportunity feeds.</p></div><div class="scroll-hint" aria-hidden="true"><span></span></div></section>''' + story_section + render_photo_gallery() + '''
+    body = '''<section class="hero" id="hero"><div class="hero-bg-beyond" aria-hidden="true"></div><div class="hero-bg-now" aria-hidden="true"></div><div class="hero-content"><p class="brand-display"><span class="brand-num">70</span><span class="brand-word">Scholar</span></p><p class="eyebrow">Matched to your level. Built to launch.</p><h1>There's a version of your future<br>still waiting to be found.</h1><p class="subhead">70Scholar finds scholarships, internships, grants, and competitions built for where you stand — then gives you a secure workspace to build the projects that get you noticed, funded, or sold.</p><div class="hero-actions"><a href="/opportunities" class="cta-primary">See real open opportunities <span class="arrow">→</span></a><a href="/marketplace" class="cta-secondary">Fund or buy student projects</a></div><p class="hero-micro">Real listings, refreshed from trusted opportunity feeds.</p></div><div class="scroll-hint" aria-hidden="true"><span></span></div></section>''' + render_typewriter() + story_section + render_slideshow() + render_photo_gallery() + render_extra_features() + '''
 <section class="gap-section"><p class="eyebrow eyebrow-dark">Why most students miss out</p><p class="gap-statement">Most scholarships don't go unclaimed because nobody qualified. They go unclaimed because the right student never found them — or found them too late to build something strong.</p></section>
 <section class="journey-section" id="journey"><div class="journey-header"><p class="eyebrow">The path across</p><h2>Discover. Build. Launch. Fund.</h2></div><div class="journey-path"><div class="journey-step"><span class="step-number">01</span><h3>Discover</h3><p>Browse real openings and save the ones that fit your country, field, deadline, and level.</p></div><div class="journey-step"><span class="step-number">02</span><h3>Build</h3><p>Keep drafts, pitch text, links, files, and project details in your private account so unfinished work stays safe.</p></div><div class="journey-step"><span class="step-number">03</span><h3>Launch</h3><p>Publish a project to the marketplace, attach a demo or release file, and invite buyers, donors, mentors, or funders.</p></div></div></section>
 <section class="opportunities-section"><div class="opp-header"><p class="eyebrow eyebrow-dark">What's waiting on the other side</p><h2>Every door, sorted by which one actually opens for you.</h2></div><div class="opportunity-cards feature-cards"><div class="opp-card"><div class="icon-dot">🎓</div><h3>Scholarships</h3><p>Funding matched to your field, level, and country, with deadlines you can track.</p></div><div class="opp-card"><div class="icon-dot">💼</div><h3>Internships</h3><p>Roles sized for where you actually are in school, not five-year-experience traps.</p></div><div class="opp-card"><div class="icon-dot">🏆</div><h3>Competitions & grants</h3><p>Contests and small grants your project can realistically compete for.</p></div></div></section>
@@ -360,12 +518,156 @@ def render_home(user):
 <section class="final-cta" id="final-cta"><h2>Cross over.</h2><p>Somewhere on the other side, there's a deadline that hasn't found you yet. Better to be early.</p><a href="/signup" class="cta-primary">Create your free workspace <span class="arrow">→</span></a></section>'''
     return page_shell("Future waiting to be found", body, user)
 
-def render_auth(mode: str, msg: str = ""):
+SLIDESHOW_PHOTOS = [
+    ("slide-01.jpg", "Students studying together in a school library"),
+    ("slide-02.jpg", "A student working at the chalkboard"),
+    ("slide-03.jpg", "Education leaders at a national event"),
+    ("slide-04.jpg", "Students collaborating around a table"),
+    ("slide-05.jpg", "School leaders and partners"),
+    ("slide-06.jpg", "A classroom of students in uniform"),
+    ("slide-07.jpg", "A teacher teaching at the chalkboard"),
+    ("slide-08.jpg", "Education stakeholders at a national dialogue"),
+    ("slide-09.jpg", "Delegates at an education conference"),
+    ("slide-10.jpg", "A ministerial address on education policy"),
+    ("slide-11.jpg", "Examination materials presented to a student"),
+    ("slide-12.jpg", "Students sitting national examinations"),
+]
+
+def hover_card(inner: str, description: str, extra_class: str = "") -> str:
+    """Wrap content with a cursor-following auto-description tooltip."""
+    return f'<div class="hover-card {extra_class}" data-tooltip="{e(description)}">{inner}</div>'
+
+def render_slideshow() -> str:
+    slides = "".join([
+        f'<figure class="slide {"is-active" if i == 0 else ""}" data-index="{i}">'
+        f'<img src="/static/images/slides/{f}?v={APP_VERSION}" alt="{e(alt)}" loading="{"eager" if i == 0 else "lazy"}" decoding="async">'
+        f'<figcaption>{e(alt)}</figcaption></figure>'
+        for i, (f, alt) in enumerate(SLIDESHOW_PHOTOS)
+    ])
+    dots = "".join([f'<button class="slide-dot {"is-active" if i == 0 else ""}" data-go="{i}" aria-label="Show photo {i+1}"></button>' for i in range(len(SLIDESHOW_PHOTOS))])
+    return f"""<section class="slideshow-section" id="gallery">
+      <div class="slideshow-head"><p class="eyebrow eyebrow-dark">Inside Rwanda's classrooms</p>
+      <h2>Real moments from real learners.</h2></div>
+      <div class="slideshow" id="slideshow">
+        <div class="slides">{slides}</div>
+        <button class="slide-nav prev" data-dir="-1" aria-label="Previous photo">‹</button>
+        <button class="slide-nav next" data-dir="1" aria-label="Next photo">›</button>
+        <div class="slide-dots">{dots}</div>
+        <span class="slide-counter"><strong id="slideCurrent">1</strong> / {len(SLIDESHOW_PHOTOS)}</span>
+      </div>
+    </section>"""
+
+def render_typewriter() -> str:
+    return """<section class="typewriter-band"><p class="typewriter-label">Everything you need, in one place</p>
+      <p class="typewriter-line"><span id="typewriter"></span><span class="typewriter-caret" aria-hidden="true"></span></p>
+      <p class="typewriter-sub">Opportunities, courses, exam prep, applications and funding — built for students who are ready to move.</p></section>"""
+
+def render_extra_features() -> str:
+    """Extra homepage sections: feature grid, live stats, how-it-works, FAQ, CTA."""
+    return """<section class="feature-section" id="features">
+      <div class="feature-inner"><p class="eyebrow eyebrow-dark">Built for the whole journey</p>
+      <h2>One account. Every step from discovery to funding.</h2>
+      <div class="feature-grid">
+        <a class="feature-tile" href="/opportunities" data-tooltip="Browse verified scholarships, internships, competitions, grants and applications. Hover any listing for an instant description."><span class="feature-icon">🔎</span><h3>Opportunity finder</h3><p>Search by country, level, field and deadline. Save what fits.</p></a>
+        <a class="feature-tile" href="/courses" data-tooltip="Pre-university courses in academic English, foundation maths, programming, research methods and university applications."><span class="feature-icon">📚</span><h3>Pre-university courses</h3><p>Close the gap before you apply with short, focused courses.</p></a>
+        <a class="feature-tile" href="/exams" data-tooltip="Prepare for SAT, ACT, IELTS, TOEFL, AP/IB/A-Levels and scholarship aptitude tests with structured study plans."><span class="feature-icon">📝</span><h3>Exam preparation</h3><p>Practice plans for the tests that unlock university offers.</p></a>
+        <a class="feature-tile" href="/submit" data-tooltip="Found an opportunity? Submit it for admin review. Nothing is published until the owner approves it."><span class="feature-icon">➕</span><h3>Community submissions</h3><p>Add a scholarship or competition and help other students find it.</p></a>
+        <a class="feature-tile" href="/marketplace" data-tooltip="Publish your project, attach files, and let sponsors support you directly. 5% of each contribution funds other student projects."><span class="feature-icon">🚀</span><h3>Project marketplace</h3><p>Show your build, find sponsors, and get funded.</p></a>
+        <a class="feature-tile" href="/signup" data-tooltip="Create a free account to unlock opportunities, courses, exam prep, submissions and the builder workspace."><span class="feature-icon">🔐</span><h3>Your private workspace</h3><p>Drafts, uploads, saved listings and messages in one place.</p></a>
+      </div></div></section>
+    <section class="trust-section"><div class="trust-inner">
+      <div class="trust-stat"><strong data-count="37">0</strong><span>opportunities listed</span></div>
+      <div class="trust-stat"><strong data-count="12">0</strong><span>photos of real learners</span></div>
+      <div class="trust-stat"><strong data-count="6">0</strong><span>pre-university courses</span></div>
+      <div class="trust-stat"><strong data-count="6">0</strong><span>exam prep tracks</span></div>
+    </div></section>
+    <section class="faq-section"><div class="faq-inner"><p class="eyebrow eyebrow-dark">Good to know</p><h2>Questions students ask us.</h2>
+      <details class="faq-item"><summary>Do I need an account to see opportunities?</summary><p>Yes. Create a free account or log in to browse opportunities, courses, exam prep, the marketplace and your workspace. The homepage stays open to everyone.</p></details>
+      <details class="faq-item"><summary>Are the courses and exam prep free?</summary><p>Joining a course or exam track is free. It saves your place so study materials and practice plans can be added to your dashboard.</p></details>
+      <details class="faq-item"><summary>Can I add an opportunity?</summary><p>Yes. Use “Add opportunity” after signing in. Your submission stays private until the admin approves it.</p></details>
+      <details class="faq-item"><summary>How does the 5% platform contribution work?</summary><p>When a sponsor supports a project, a 5% platform contribution is recorded for the 70Scholar Future Fund, which sponsors other student projects. The rest goes to the creator.</p></details>
+      <details class="faq-item"><summary>Where do the photos come from?</summary><p>Real photographs from Rwanda's National Examination and School Inspection Authority (NESA) website.</p></details>
+    </div></section>
+    <section class="cta-band"><h2>Your next opportunity is already out there.</h2><p>Join 70Scholar and start building the future you can see.</p><div class="hero-actions"><a class="cta-primary" href="/signup">Create your free account <span class="arrow">→</span></a><a class="cta-secondary dark" href="/login">Log in</a></div></section>"""
+
+def render_courses(user, msg: str = ""):
+    cards = "".join([
+        hover_card(
+            f"""<article class="course-card"><span class="tag">{e(c['category'])}</span><h3>{e(c['title'])}</h3>
+            <p class="provider">{e(c['level'])} · {e(c['duration'])}</p><p>{e(c['summary'])}</p>
+            <ul class="check-list">{''.join(f'<li>{e(t)}</li>' for t in c['topics'])}</ul>
+            <form method="post" action="/course/enrol" class="inline-form">
+            <input type="hidden" name="csrf" value="{e(user['csrf'])}">
+            <input type="hidden" name="course_key" value="{e(c['title'])}">
+            <input type="hidden" name="kind" value="course">
+            <button class="cta-primary slim" type="submit">Join this course</button></form></article>""",
+            f"{c['title']}: {c['summary']} Level: {c['level']}. Duration: {c['duration']}. Covers " + ", ".join(c['topics']) + ".",
+            "course-wrap") for c in PREUNI_COURSES
+    ])
+    body = f"""<section class="page-hero compact"><p class="eyebrow">Pre-university academy</p>
+      <h1>Get ready before you apply.</h1><p>Short, practical courses that close the gap between secondary school and university.</p></section>
+      <section class="panel-section">{flash(msg,'success') if msg else ''}
+      <div class="course-grid">{cards}</div></section>"""
+    return page_shell("Pre-university courses", body, user, "courses")
+
+def render_exams(user, msg: str = ""):
+    cards = "".join([
+        hover_card(
+            f"""<article class="course-card exam-card"><span class="tag">{e(c['category'])}</span><h3>{e(c['title'])}</h3>
+            <p class="provider">{e(c['level'])} · {e(c['duration'])}</p><p>{e(c['summary'])}</p>
+            <ul class="check-list">{''.join(f'<li>{e(t)}</li>' for t in c['topics'])}</ul>
+            <form method="post" action="/course/enrol" class="inline-form">
+            <input type="hidden" name="csrf" value="{e(user['csrf'])}">
+            <input type="hidden" name="course_key" value="{e(c['title'])}">
+            <input type="hidden" name="kind" value="exam">
+            <button class="cta-primary slim" type="submit">Start preparing</button></form></article>""",
+            f"{c['title']}: {c['summary']} Level: {c['level']}. Duration: {c['duration']}. Focus areas: " + ", ".join(c['topics']) + ".",
+            "course-wrap") for c in EXAM_PREP
+    ])
+    body = f"""<section class="page-hero compact"><p class="eyebrow">Exam preparation</p>
+      <h1>Walk into the exam ready.</h1><p>Structured preparation for university entrance exams, English proficiency tests and scholarship selection.</p></section>
+      <section class="panel-section">{flash(msg,'success') if msg else ''}
+      <div class="course-grid">{cards}</div></section>"""
+    return page_shell("Exam preparation", body, user, "exams")
+
+def render_submit(user, msg: str = "", kind: str = "success"):
+    opts = "".join(f"<option>{t}</option>" for t in ["Scholarship","Internship","Competition","Grant","Hackathon","Application","Opportunity"])
+    with db() as conn:
+        mine = conn.execute("SELECT * FROM opportunity_submissions WHERE user_id=? ORDER BY id DESC LIMIT 10", (user["id"],)).fetchall()
+    rows = "".join([f"<li><strong>{e(r['title'])}</strong> <span class='tag'>{e(r['status'])}</span><br><span>{e(r['type'])} · {e(r['deadline'])}</span></li>" for r in mine])
+    body = f"""<section class="page-hero compact"><p class="eyebrow">Community submissions</p>
+      <h1>Add an opportunity.</h1><p>Found a scholarship, competition or application others should know about? Submit it here. The admin reviews every submission before it appears publicly.</p></section>
+      <section class="panel-section">{flash(msg,kind) if msg else ''}
+      <div class="submit-layout">
+        <form method="post" action="/opportunity/submit" class="builder-form">
+          <input type="hidden" name="csrf" value="{e(user['csrf'])}">
+          <h2>Opportunity details</h2>
+          <div class="form-row"><label>Type<select name="type">{opts}</select></label>
+          <label>Deadline<input name="deadline" placeholder="e.g. 2026-12-31 or Rolling" required></label></div>
+          <label>Title<input name="title" required maxlength="200" placeholder="Official opportunity name"></label>
+          <div class="form-row"><label>Provider / organisation<input name="provider" required maxlength="160"></label>
+          <label>Country<input name="country" required maxlength="100" placeholder="Rwanda / Global"></label></div>
+          <label>Eligible level<input name="level" required maxlength="160" placeholder="e.g. Final-year secondary, undergraduates"></label>
+          <label>Official URL<input name="url" type="url" required placeholder="https://"></label>
+          <label>Short summary<textarea name="summary" required maxlength="1200" placeholder="Who can apply, what it offers, and why it matters"></textarea></label>
+          <label>Tags<input name="tags" maxlength="200" placeholder="STEM, women, Africa"></label>
+          <button class="cta-primary" type="submit">Submit for review</button>
+        </form>
+        <div class="builder-panel"><h2>Your submissions</h2>
+        <ul class="clean-list">{rows if rows else '<li>Nothing submitted yet.</li>'}</ul>
+        <p class="muted">Pending items are visible only to you and the admin until approved.</p></div>
+      </div></section>"""
+    return page_shell("Submit an opportunity", body, user, "submit")
+
+
+def render_auth(mode: str, msg: str = "", next_url: str = ""):
     is_signup = mode == "signup"; title = "Create your account" if is_signup else "Log in"; action = "/signup" if is_signup else "/login"
+    safe_next = next_url if next_url.startswith("/") and not next_url.startswith("//") else ""
+    hidden_next = f"<input type='hidden' name='next' value='{e(safe_next)}'>" if safe_next and not is_signup else ""
     extra = '<label>Full name<input required name="name" autocomplete="name" placeholder="Your name"></label>' if is_signup else ''
     switch = "Already have an account? <a href='/login'>Log in</a>." if is_signup else "New here? <a href='/signup'>Create an account</a>."
     forgot = "" if is_signup else "<p class='muted'><a href='/forgot-password'>Forgot password?</a></p>"
-    body = f"""<section class="auth-wrap"><form class="auth-card" method="post" action="{action}"><p class="eyebrow eyebrow-dark">Secure workspace</p><h1>{title}</h1>{flash(msg,'error') if msg else ''}{extra}<label>Email<input required type="email" name="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input required type="password" name="password" autocomplete="{'new-password' if is_signup else 'current-password'}" minlength="8" placeholder="At least 8 characters"></label><button class="cta-primary auth-button" type="submit">{title}</button>{forgot}<p class="muted">{switch}</p></form></section>"""
+    body = f"""<section class="auth-wrap"><form class="auth-card" method="post" action="{action}"><p class="eyebrow eyebrow-dark">Secure workspace</p><h1>{title}</h1>{flash(msg,'error') if msg else ''}{hidden_next}{extra}<label>Email<input required type="email" name="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input required type="password" name="password" autocomplete="{'new-password' if is_signup else 'current-password'}" minlength="8" placeholder="At least 8 characters"></label><button class="cta-primary auth-button" type="submit">{title}</button>{forgot}<p class="muted">{switch}</p></form></section>"""
     return page_shell(title, body, None)
 
 def render_notice(title: str, message: str, user=None):
@@ -435,7 +737,7 @@ def render_opportunities(user, query):
             saved = item["id"] in bookmarks
             save_button = f"""<form method="post" action="/bookmark" class="inline-form"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><input type="hidden" name="opportunity_id" value="{item['id']}"><button class="ghost-button" type="submit">{'Saved ✓' if saved else 'Save'}</button></form>"""
         else: save_button = "<a class='ghost-button' href='/login'>Log in to save</a>"
-        cards.append(f"""<article class="listing-card"><div class="listing-top"><span class="tag">{e(item['type'])}</span><span class="deadline">{e(deadline_badge(item['deadline']))}</span></div><h3>{e(item['title'])}</h3><p class="provider">{e(item['provider'])} · {e(item['country'])}</p><p>{e(item['summary'])}</p><dl class="mini-meta"><div><dt>Level</dt><dd>{e(item['level'])}</dd></div><div><dt>Deadline</dt><dd>{e(item['deadline'])}</dd></div></dl><p class="source">Source: {e(item['source'])}</p><div class="card-actions"><a class="cta-primary slim" target="_blank" rel="noopener" href="{e(item['url'])}">Apply on source ↗</a>{save_button}</div></article>""")
+        cards.append(f"""<article class="listing-card" data-tooltip="{e(item['auto_description'] if 'auto_description' in item.keys() and item['auto_description'] else make_auto_description(item))}"><div class="listing-top"><span class="tag">{e(item['type'])}</span><span class="deadline">{e(deadline_badge(item['deadline']))}</span></div><h3>{e(item['title'])}</h3><p class="provider">{e(item['provider'])} · {e(item['country'])}</p><p>{e(item['summary'])}</p><dl class="mini-meta"><div><dt>Level</dt><dd>{e(item['level'])}</dd></div><div><dt>Deadline</dt><dd>{e(item['deadline'])}</dd></div></dl><p class="source">Source: {e(item['source'])}</p><div class="card-actions"><a class="cta-primary slim" target="_blank" rel="noopener" href="{e(item['url'])}">Apply on source ↗</a>{save_button}</div></article>""")
     def sel(x): return "selected" if typ == x else ""
     body = f"""<section class="page-hero compact"><p class="eyebrow">Opportunity finder</p><h1>Real applications, contests, internships, and grants.</h1><p>These seed listings are current starting points for August 2026. Always verify the final deadline and eligibility on the official page before applying.</p></section><section class="panel-section"><form class="filter-bar" method="get" action="/opportunities"><input name="q" value="{e(q)}" placeholder="Search Rwanda, AI, climate, internship..."><select name="type"><option value="">All types</option><option {sel('Scholarship')} value="Scholarship">Scholarships</option><option {sel('Internship')} value="Internship">Internships</option><option {sel('Competition')} value="Competition">Competitions</option><option {sel('Grant')} value="Grant">Grants</option><option {sel('Hackathon')} value="Hackathon">Hackathons</option></select><button class="cta-primary slim" type="submit">Filter</button></form><div class="listing-grid">{''.join(cards) if cards else '<p class="empty">No matches yet. Try a different search.</p>'}</div></section>"""
     return page_shell("Opportunities", body, user, "opportunities")
@@ -534,7 +836,7 @@ def render_project_detail(user, project_id):
     sale = f"<p class='sale-pill block'>Available for sale / licence: {money(p['price'])}</p>" if float(p['price'] or 0)>0 else ""
     payout_details = ""
     if p["mobile_money_number"]:
-        payout_details = f"<div class='momo-box'><h3>Creator Mobile Money</h3><p>Send support directly to the project creator, not to 70Scholar.</p><dl><div><dt>Account name</dt><dd>{e(p['mobile_money_name'])}</dd></div><div><dt>Network</dt><dd>{e(p['mobile_money_network'])}</dd></div><div><dt>Number</dt><dd>{e(p['mobile_money_number'])}</dd></div></dl><p class='muted'>{e(p['payout_notes']) if p['payout_notes'] else 'Use the project title as your payment reference.'}</p></div>"
+        payout_details = f"<div class='momo-box'><h3>Creator Mobile Money</h3><p>Send support directly to the creator. A {PLATFORM_FEE_PERCENT:.0f}% platform contribution is recorded to sponsor other student projects.</p><dl><div><dt>Account name</dt><dd>{e(p['mobile_money_name'])}</dd></div><div><dt>Network</dt><dd>{e(p['mobile_money_network'])}</dd></div><div><dt>Number</dt><dd>{e(p['mobile_money_number'])}</dd></div></dl><p class='muted'>{e(p['payout_notes']) if p['payout_notes'] else 'Use the project title as your payment reference.'}</p></div>"
     else:
         payout_details = "<div class='momo-box'><h3>Funding not activated</h3><p class='muted'>The creator has not added Mobile Money details yet.</p></div>"
     body=f"""<section class="project-detail"><div class="project-main"><span class="tag">{e(p['category'])}</span><h1>{e(p['title'])}</h1><p class="provider">by {e(p['maker_name'])}</p><p class="lead">{e(p['summary'])}</p><div class="rich-text">{e(p['details']).replace(chr(10),'<br>')}</div>{media_gallery}<div class="link-row">{link_row}</div><h2>Project files</h2><ul class="clean-list asset-list">{''.join(asset_links) if asset_links else '<li>No public release file uploaded yet.</li>'}</ul>{message_form}</div><aside class="fund-card"><h2>Fund this project</h2><div class="progress big"><span style="width:{percent}%"></span></div><p class="progress-copy"><strong>{money(pledged)}</strong> pledged of {money(goal)} goal</p>{sale}<form method="post" action="/pledge" class="pledge-form">{csrf}<input type="hidden" name="project_id" value="{p['id']}"><label>Name<input required name="name" value="{e(user['name']) if user else ''}"></label><label>Email<input required type="email" name="email" value="{e(user['email']) if user else ''}"></label><label>Pledge amount (USD)<input required type="number" min="1" step="1" name="amount" value="25"></label><label>Message<textarea name="message" rows="3" placeholder="I want to support testing, mentorship, buying, or rollout..."></textarea></label><label>Funding option<select name="provider"><option value="momo">Show creator Mobile Money details</option><option value="pledge_only">Record pledge only</option></select></label>{payout_details}<button class="cta-primary full" type="submit">Record support</button>{login_note}<p class="muted">70Scholar does not collect this money. Sponsors send funds directly to the project creator's Mobile Money account and can use the pledge as proof/record.</p></form><h3>Recent support</h3><ul class="clean-list pledge-list">{''.join(pledge_items) if pledge_items else '<li>No pledges yet. Be the first.</li>'}</ul></aside></section>"""
@@ -621,6 +923,10 @@ def render_admin(user, msg=""):
         opps = conn.execute("SELECT * FROM opportunities ORDER BY created_at DESC LIMIT 8").fetchall()
         logs = conn.execute("SELECT * FROM sync_logs ORDER BY id DESC LIMIT 5").fetchall()
         pledges = conn.execute("SELECT pl.*, p.title FROM pledges pl JOIN projects p ON p.id=pl.project_id ORDER BY pl.id DESC LIMIT 8").fetchall()
+        submissions = conn.execute("SELECT s.*, u.name submitter, u.email submitter_email FROM opportunity_submissions s JOIN users u ON u.id=s.user_id WHERE s.status='pending' ORDER BY s.id DESC LIMIT 20").fetchall()
+        sources = conn.execute("SELECT * FROM feed_sources ORDER BY id").fetchall()
+        fund = conn.execute("SELECT COALESCE(SUM(platform_fee),0) c FROM pledges WHERE status LIKE 'paid%'").fetchone()["c"]
+        stats["platform_fund"] = fund
     cards = ''.join([f"<div class='stat-card'><span>{k.replace('_',' ').title()}</span><strong>{money(v) if k=='pledges' else e(v)}</strong></div>" for k,v in stats.items()])
     user_rows = ''
     for u in users:
@@ -635,6 +941,15 @@ def render_admin(user, msg=""):
     opp_rows = ''.join([f"<tr><td>{e(o['type'])}</td><td>{e(o['title'])}</td><td>{e(o['deadline'])}</td><td><a href='{e(o['url'])}' target='_blank'>source ↗</a></td><td><form method='post' action='/admin/opportunity/delete'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><input type='hidden' name='opportunity_id' value='{o['id']}'><button class='ghost-button' type='submit'>Delete</button></form></td></tr>" for o in opps])
     log_rows = ''.join([f"<li><strong>{e(l['imported'])}</strong> imported from {e(l['source'])}<br><span>{e(l['message'])}</span></li>" for l in logs])
     pledge_rows = ''.join([f"<li><strong>{money(p['amount'])}</strong> for {e(p['title'])}<br><span>{e(p['name'])} · {e(p['status'])}</span></li>" for p in pledges])
+    auto_on = get_setting("auto_sync", "0") == "1"
+    toggle_html = f"""<form method='post' action='/admin/auto-sync' class='toggle-form'>
+      <input type='hidden' name='csrf' value='{e(user['csrf'])}'>
+      <input type='hidden' name='enabled' value='{'0' if auto_on else '1'}'>
+      <button class='toggle-switch {'is-on' if auto_on else ''}' type='submit' aria-pressed='{'true' if auto_on else 'false'}'>
+        <span class='toggle-knob'></span></button>
+      <span class='toggle-label'>Auto-import is <strong>{'ON' if auto_on else 'OFF'}</strong></span></form>"""
+    source_rows = ''.join([f"<li><span>{e(r['url'])}</span><form method='post' action='/admin/source/fetch' class='table-form'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><input type='hidden' name='url' value='{e(r['url'])}'><button class='ghost-button' type='submit'>Fetch now</button></form><form method='post' action='/admin/source/delete' class='table-form'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><input type='hidden' name='source_id' value='{r['id']}'><button class='ghost-button danger' type='submit'>Remove</button></form></li>" for r in sources])
+    sub_rows = ''.join([f"<article class='mini-card moderation-card'><span class='tag'>{e(r['type'])}</span><h3>{e(r['title'])}</h3><p>{e(r['summary'])}</p><p class='provider'>by {e(r['submitter'])} · {e(r['submitter_email'])} · deadline {e(r['deadline'])}</p><p><a href='{e(r['url'])}' target='_blank' rel='noopener'>source ↗</a></p><form method='post' action='/admin/submission/action' class='card-actions'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><input type='hidden' name='submission_id' value='{r['id']}'><button name='action' value='approve' class='cta-primary slim' type='submit'>Approve</button><button name='action' value='reject' class='ghost-button' type='submit'>Reject</button></form></article>" for r in submissions])
     body=f"""
     <section class='page-hero compact admin-hero'><p class='eyebrow'>Admin command center</p><h1>Manage users, opportunities, moderation, and growth.</h1><p>Review marketplace submissions, manage roles, import opportunities, and keep 70Scholar safe. Admin access is restricted to <strong>{OWNER_ADMIN_EMAIL}</strong>.</p></section>
     <section class='admin-grid'>
@@ -643,6 +958,11 @@ def render_admin(user, msg=""):
       <div class='dash-panel'><h2>Project moderation queue</h2><p class='muted'>Projects submitted for marketplace publication appear here first.</p><div class='mini-grid'>{pending_rows if pending_rows else '<p class="empty">No projects waiting for review.</p>'}</div></div>
       <div class='dash-panel admin-form'><h2>Add an opportunity manually</h2><form method='post' action='/admin/opportunity/add' class='builder-form'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><div class='form-row'><label>Type<select name='type'><option>Scholarship</option><option>Internship</option><option>Competition</option><option>Grant</option><option>Hackathon</option><option>Opportunity</option></select></label><label>Deadline<input required type='date' name='deadline'></label></div><label>Title<input required name='title'></label><div class='form-row'><label>Provider<input required name='provider'></label><label>Country / region<input required name='country' value='Global'></label></div><label>Level<input required name='level' value='Students / young builders'></label><label>Application URL<input required type='url' name='url'></label><label>Summary<textarea required name='summary' rows='4'></textarea></label><label>Tags<input name='tags' placeholder='ai,rwanda,climate'></label><button class='cta-primary' type='submit'>Post opportunity</button></form></div>
       <div class='dash-panel'><h2>Automatic opportunity posting</h2><p class='muted'>Imports latest RSS posts from configured opportunity sources. Admin should verify important deadlines.</p><form method='post' action='/admin/sync'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><button class='cta-primary' type='submit'>Sync opportunities now</button></form><ul class='clean-list'>{log_rows if log_rows else '<li>No syncs yet.</li>'}</ul></div>
+      <div class='dash-panel'><h2>Community submissions</h2><p class='muted'>User-submitted opportunities stay private until you approve them.</p><div class='mini-grid'>{sub_rows if sub_rows else '<p class="empty">No submissions waiting for review.</p>'}</div></div>
+      <div class='dash-panel'><h2>Auto-import &amp; source links</h2><p class='muted'>Turn on auto-import to refresh saved links every 30 minutes, or fetch any link immediately.</p>{toggle_html}
+        <form method='post' action='/admin/source/add' class='builder-form'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><label>Add a feed or webpage link<input name='url' type='url' placeholder='https://example.com/feed' required></label><button class='cta-primary slim' type='submit'>Save link</button></form>
+        <form method='post' action='/admin/source/fetch' class='builder-form'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><label>Fetch a one-off link<input name='url' type='url' placeholder='https://example.com/opportunities' required></label><button class='ghost-button' type='submit'>Fetch now</button></form>
+        <ul class='clean-list admin-source-list'>{source_rows if source_rows else '<li>No saved sources.</li>'}</ul></div>
       <div class='dash-panel'><h2>User controls</h2><div class='table-wrap'><table><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead><tbody>{user_rows}</tbody></table></div></div>
       <div class='dash-panel'><h2>Recent projects</h2><div class='table-wrap'><table><thead><tr><th>ID</th><th>Title</th><th>Maker</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead><tbody>{project_rows}</tbody></table></div></div>
       <div class='dash-panel'><h2>Newest opportunities</h2><div class='table-wrap'><table><thead><tr><th>Type</th><th>Title</th><th>Deadline</th><th>Link</th><th>Action</th></tr></thead><tbody>{opp_rows}</tbody></table></div></div>
@@ -655,8 +975,9 @@ def render_payment_setup(user, pledge, provider, checkout_url=""):
     if checkout_url:
         joiner = '&' if '?' in checkout_url else '?'
         return checkout_url + joiner + urlencode({"amount": str(pledge["amount"]), "email": pledge["email"], "reference": ref})
+    fee = round(float(pledge["amount"]) * PLATFORM_FEE_PERCENT / 100.0, 2)
     if provider == 'momo':
-        instructions = f"Send {money(pledge['amount'])} directly to {pledge['mobile_money_name']} on {pledge['mobile_money_network']} using number {pledge['mobile_money_number']}. Reference: {ref}. {pledge['payout_notes'] or 'Use the project title in the payment note.'}"
+        instructions = f"Send {money(pledge['amount'])} to {pledge['mobile_money_name']} on {pledge['mobile_money_network']} using number {pledge['mobile_money_number']}. Reference: {ref}. {pledge['payout_notes'] or 'Use the project title in the payment note.'} A {PLATFORM_FEE_PERCENT:.0f}% platform contribution ({money(fee)}) is recorded for the 70Scholar Future Fund; the creator receives {money(float(pledge['amount']) - fee)}."
     else:
         instructions = "This provider is disabled for now. 70Scholar is configured for direct creator Mobile Money funding so money does not go to the platform owner."
     body = f"""<section class='auth-wrap'><div class='auth-card payment-card'><p class='eyebrow eyebrow-dark'>Direct creator payment</p><h1>{e(provider.title())} support</h1><p>You recorded a pledge of <strong>{money(pledge['amount'])}</strong> for <strong>{e(pledge['title'])}</strong>.</p><p class='muted'>Reference: <strong>{e(ref)}</strong></p><div class='rich-text'>{e(instructions)}</div><a class='cta-primary full' href='/payment/success?pledge_id={pledge['id']}'>I have sent it / mark paid in demo</a><a class='ghost-button full' href='/project?id={pledge['project_id']}'>Back to project</a></div></section>"""
@@ -699,8 +1020,18 @@ class ScholarHandler(BaseHTTPRequestHandler):
         return {k:v[0] for k,v in parse_qs(self.read_body().decode(errors="replace"), keep_blank_values=True).items()}
     def require_user(self):
         user = self.current_user()
-        if not user: self.redirect("/login"); return None
+        if not user:
+            dest = self.path if self.path.startswith("/") else "/"
+            self.redirect("/login?next=" + quote(dest, safe="/?=&"))
+            return None
         return user
+
+    def gate(self, user) -> bool:
+        """Return True when the request may proceed; otherwise send a login redirect."""
+        if user: return True
+        dest = self.path if self.path.startswith("/") else "/"
+        self.redirect("/login?next=" + quote(dest, safe="/?=&"))
+        return False
     def verify_csrf(self, user, form=None):
         if not user: return False
         sent = form.get("csrf", "") if form is not None else self.headers.get("X-CSRF-Token", "")
@@ -719,14 +1050,19 @@ class ScholarHandler(BaseHTTPRequestHandler):
         if path == "/version": return self.send_plain(f"70Scholar {APP_VERSION} - bigger brand, single-owner admin, NESA photo gallery", "text/plain")
         if path.startswith("/uploads/profiles/"): return self.serve_profile_upload(path)
         if path.startswith("/static/"): return self.serve_static(path)
+        if path.startswith("/uploads/profiles/"): return self.serve_profile_upload(path)
+        if path not in PUBLIC_GET_PATHS and not self.gate(user): return None
         if path == "/download": return self.serve_download(query, user)
         if path == "/": return self.send_html(render_home(user))
         if path == "/signup": return self.send_html(render_auth("signup"))
-        if path == "/login": return self.send_html(render_auth("login"))
+        if path == "/login": return self.send_html(render_auth("login", next_url=query.get("next", [""])[0]))
         if path == "/verify-email": return self.handle_verify_email(query)
         if path == "/forgot-password": return self.send_html(render_forgot_password())
         if path == "/reset-password": return self.send_html(render_reset_password(query.get("token", [""])[0]))
         if path == "/opportunities": return self.send_html(render_opportunities(user, query))
+        if path == "/courses": return self.send_html(render_courses(user))
+        if path == "/exams": return self.send_html(render_exams(user))
+        if path == "/submit": return self.send_html(render_submit(user))
         if path == "/dashboard":
             user=self.require_user(); return None if not user else self.send_html(render_dashboard(user))
         if path == "/account":
@@ -771,6 +1107,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         data=path.read_bytes(); self.send_response(200); self.send_header("Content-Type", asset["mime"] or "application/octet-stream"); self.send_header("Content-Length", str(len(data))); disposition = "inline" if query.get("inline") else "attachment"; self.send_header("Content-Disposition", f"{disposition}; filename=\"{asset['filename']}\""); self.end_headers(); self.wfile.write(data)
     def do_POST(self):
         path=urlparse(self.path).path; user=self.current_user()
+        if path not in PUBLIC_POST_PATHS and not self.gate(user): return None
         if path == "/signup": return self.handle_signup(self.read_form())
         if path == "/login": return self.handle_login(self.read_form())
         if path == "/forgot-password": return self.handle_forgot_password(self.read_form())
@@ -838,6 +1175,57 @@ class ScholarHandler(BaseHTTPRequestHandler):
             if not is_admin(user): return self.send_html(page_shell("Forbidden", "<section class='panel-section'>Owner admin only.</section>", user), 403)
             if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "<section class='panel-section'>CSRF check failed.</section>", user), 403)
             return self.handle_admin_user_action(user, form)
+        if path == "/opportunity/submit":
+            form=self.read_form()
+            if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "<section class='panel-section'>CSRF check failed.</section>", user), 403)
+            return self.handle_opportunity_submission(user, form)
+        if path == "/course/enrol":
+            form=self.read_form()
+            if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "<section class='panel-section'>CSRF check failed.</section>", user), 403)
+            return self.handle_course_enrol(user, form)
+        if path == "/admin/submission/action":
+            form=self.read_form()
+            if not is_admin(user): return self.send_html(page_shell("Forbidden", "Owner admin only.", user), 403)
+            if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "CSRF check failed.", user), 403)
+            return self.handle_submission_action(user, form)
+        if path == "/admin/auto-sync":
+            form=self.read_form()
+            if not is_admin(user): return self.send_html(page_shell("Forbidden", "Owner admin only.", user), 403)
+            if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "CSRF check failed.", user), 403)
+            on = "1" if form.get("enabled") == "1" else "0"
+            set_setting("auto_sync", on)
+            if on == "1": set_setting("auto_sync_last", "0")
+            return self.send_html(render_admin(user, f"Auto-import {'enabled' if on == '1' else 'disabled'}."))
+        if path == "/admin/source/add":
+            form=self.read_form()
+            if not is_admin(user): return self.send_html(page_shell("Forbidden", "Owner admin only.", user), 403)
+            if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "CSRF check failed.", user), 403)
+            url=(form.get("url") or "").strip()
+            if urlparse(url).scheme not in ("http","https"):
+                return self.send_html(render_admin(user, "Enter a valid http or https link."), 400)
+            with db() as conn:
+                conn.execute("INSERT OR IGNORE INTO feed_sources(url,added_at) VALUES(?,?)", (url, now_iso()))
+            return self.send_html(render_admin(user, "Source link saved. Use 'Fetch now' to import its listings."))
+        if path == "/admin/source/fetch":
+            form=self.read_form()
+            if not is_admin(user): return self.send_html(page_shell("Forbidden", "Owner admin only.", user), 403)
+            if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "CSRF check failed.", user), 403)
+            url=(form.get("url") or form.get("source") or "").strip()
+            if urlparse(url).scheme not in ("http","https"):
+                return self.send_html(render_admin(user, "Enter a valid http or https link."), 400)
+            try:
+                items=fetch_feed_items(url)
+                added=import_feed_items(items, url)
+                return self.send_html(render_admin(user, f"Fetched {len(items)} items; imported {added} new listings from your link."))
+            except Exception as ex:
+                return self.send_html(render_admin(user, f"Could not fetch that link: {str(ex)[:160]}"), 400)
+        if path == "/admin/source/delete":
+            form=self.read_form()
+            if not is_admin(user): return self.send_html(page_shell("Forbidden", "Owner admin only.", user), 403)
+            if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "CSRF check failed.", user), 403)
+            if form.get("source_id","").isdigit():
+                with db() as conn: conn.execute("DELETE FROM feed_sources WHERE id=?", (int(form["source_id"]),))
+            return self.send_html(render_admin(user, "Source removed."))
         if path == "/admin/opportunity/delete":
             form=self.read_form();
             if not user: return self.redirect("/login")
@@ -905,7 +1293,9 @@ class ScholarHandler(BaseHTTPRequestHandler):
             try: send_verification_email(user["id"], user["email"], user["name"])
             except Exception: pass
             return self.send_html(render_auth("login", "Please verify your email first. We sent a new verification link."), 403)
-        return self.create_session_and_redirect(email, "/dashboard")
+        nxt = (form.get("next") or "").strip()
+        if not (nxt.startswith("/") and not nxt.startswith("//")): nxt = "/dashboard"
+        return self.create_session_and_redirect(email, nxt)
     def handle_account_name(self, user, form):
         name=form.get("name","").strip()[:120]
         if len(name) < 2:
@@ -993,7 +1383,8 @@ class ScholarHandler(BaseHTTPRequestHandler):
             if not project: return self.redirect("/marketplace")
             if provider == "momo" and not project["mobile_money_number"]:
                 provider = "pledge_only"; status = "pledged"
-            cur = conn.execute("INSERT INTO pledges(project_id,user_id,name,email,amount,message,status,created_at) VALUES(?,?,?,?,?,?,?,?)", (int(pid), user["id"] if user else None, name, email, amount, msg, status, now_iso()))
+            fee = round(amount * PLATFORM_FEE_PERCENT / 100.0, 2)
+            cur = conn.execute("INSERT INTO pledges(project_id,user_id,name,email,amount,message,status,created_at,platform_fee,creator_amount) VALUES(?,?,?,?,?,?,?,?,?,?)", (int(pid), user["id"] if user else None, name, email, amount, msg, status, now_iso(), fee, round(amount - fee, 2)))
             pledge_id = cur.lastrowid
         if provider != "pledge_only": return self.redirect(f"/payment/start?pledge_id={pledge_id}&provider={provider}")
         return self.redirect(f"/project?id={pid}")
@@ -1053,6 +1444,52 @@ class ScholarHandler(BaseHTTPRequestHandler):
                 conn.execute("DELETE FROM users WHERE id=?", (int(uid),))
                 return self.send_html(render_admin(user, "User deleted."))
         return self.send_html(render_admin(user, "Action complete."))
+    def handle_opportunity_submission(self, user, form):
+        title=(form.get("title") or "").strip()[:200]
+        url=(form.get("url") or "").strip()[:500]
+        summary=(form.get("summary") or "").strip()[:1200]
+        if not title or not summary or urlparse(url).scheme not in ("http","https"):
+            return self.send_html(render_submit(user, "Please provide a title, summary and a valid https link.", "error"), 400)
+        with db() as conn:
+            conn.execute("""INSERT INTO opportunity_submissions(user_id,type,title,provider,country,level,deadline,url,summary,tags,status,created_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (user["id"], (form.get("type") or "Opportunity")[:80], title,
+                 (form.get("provider") or "Community")[:160], (form.get("country") or "Global / verify")[:100],
+                 (form.get("level") or "Students")[:160], (form.get("deadline") or "See official page")[:80],
+                 url, summary, (form.get("tags") or "")[:200], "pending", now_iso()))
+        return self.send_html(render_submit(user, "Submitted! The admin will review it before it goes public."))
+
+    def handle_course_enrol(self, user, form):
+        key=(form.get("course_key") or "").strip()[:160]
+        kind=(form.get("kind") or "course").strip()[:20]
+        if kind not in ("course","exam"): kind="course"
+        with db() as conn:
+            conn.execute("INSERT OR IGNORE INTO course_enrolments(user_id,course_key,kind,created_at) VALUES(?,?,?,?)",
+                         (user["id"], key, kind, now_iso()))
+        msg="You're enrolled. Watch your dashboard for study materials."
+        return self.send_html(render_courses(user, msg) if kind=="course" else render_exams(user, msg))
+
+    def handle_submission_action(self, user, form):
+        sid=form.get("submission_id",""); action=form.get("action","")
+        if not sid.isdigit() or action not in ("approve","reject"):
+            return self.send_html(render_admin(user, "Invalid submission action."), 400)
+        with db() as conn:
+            row=conn.execute("SELECT * FROM opportunity_submissions WHERE id=?", (int(sid),)).fetchone()
+            if not row: return self.send_html(render_admin(user, "Submission not found."), 404)
+            if action == "approve":
+                cur=conn.execute("""INSERT OR IGNORE INTO opportunities(type,title,provider,country,level,deadline,url,summary,tags,source,created_at)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                    (row["type"], row["title"], row["provider"], row["country"], row["level"], row["deadline"],
+                     row["url"], row["summary"], row["tags"], "community", now_iso()))
+                if cur.rowcount:
+                    conn.execute("UPDATE opportunities SET auto_description=? WHERE id=?",
+                        (make_auto_description({"type":row["type"],"title":row["title"],"provider":row["provider"],
+                          "country":row["country"],"level":row["level"],"deadline":row["deadline"],"summary":row["summary"]}), cur.lastrowid))
+                conn.execute("UPDATE opportunity_submissions SET status='approved', reviewed_at=? WHERE id=?", (now_iso(), int(sid)))
+                return self.send_html(render_admin(user, f"Approved and published: {row['title']}"))
+            conn.execute("UPDATE opportunity_submissions SET status='rejected', reviewed_at=? WHERE id=?", (now_iso(), int(sid)))
+        return self.send_html(render_admin(user, "Submission rejected."))
+
     def handle_admin_delete_opportunity(self, user, form):
         oid=form.get("opportunity_id","")
         if oid.isdigit():
@@ -1102,5 +1539,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         return self.send_json({"ok":True,"download_url":f"/download?id={cur.lastrowid}","filename":filename})
 
 def main():
-    init_db(); httpd=ThreadingHTTPServer((HOST, PORT), ScholarHandler); print(f"70Scholar running at http://{HOST}:{PORT}", flush=True); httpd.serve_forever()
+    init_db()
+    threading.Thread(target=auto_sync_worker, daemon=True).start()
+    httpd=ThreadingHTTPServer((HOST, PORT), ScholarHandler); print(f"70Scholar running at http://{HOST}:{PORT}", flush=True); httpd.serve_forever()
 if __name__ == "__main__": main()
