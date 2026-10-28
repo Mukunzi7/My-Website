@@ -22,7 +22,7 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 APP_NAME = "70Scholar"
-APP_VERSION = "v18-privacy"
+APP_VERSION = "v18-privacy-r1"
 COMPANY_NAME = "Nexus Company Ltd"
 APP_TAGLINE = "Find the opportunity. Show the build. Start the conversation."
 OWNER_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "honoremukunzi6@gmail.com").strip().lower()
@@ -1308,7 +1308,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
                     conn.execute('UPDATE users SET last_active=? WHERE id=?', (now_iso(),user['id']))
             return user
     def send_html(self, text, status=200, headers=None):
-        data=text.encode(); self.send_response(status); self.send_header("Content-Type","text/html; charset=utf-8"); self.send_header("Content-Length",str(len(data))); self.send_header("X-Content-Type-Options","nosniff"); self.send_header("Cache-Control","private, no-store"); self.send_header("Referrer-Policy","no-referrer")
+        data=text.encode(); self.send_response(status); self.send_header("Content-Type","text/html; charset=utf-8"); self.send_header("Content-Length",str(len(data))); self.send_header("X-Content-Type-Options","nosniff"); self.send_header("Cache-Control","private, no-store"); self.send_header("Referrer-Policy","strict-origin")
         for k,v in (headers or {}).items(): self.send_header(k,v)
         self.end_headers(); self.wfile.write(data)
     def send_json(self, payload, status=200):

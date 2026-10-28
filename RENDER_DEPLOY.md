@@ -65,7 +65,7 @@ uploads does not revoke old externally hosted copies.
 
 1. Check Render deployment status and logs, then open
    <https://seven0scholar-7cjc.onrender.com/version>. Expected:
-   `70Scholar v18-privacy - privacy, owner review and funding`.
+   `70Scholar v18-privacy-r1 - privacy, owner review and funding`.
 2. In a private browser, `/programs` should redirect to login; the homepage should show the
    slideshow and no seven-image gallery or official program links.
 3. Log in as owner, set an owner payment link if ready, and inspect review/user counts. Verify

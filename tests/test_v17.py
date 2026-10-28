@@ -114,7 +114,7 @@ class ScholarTests(unittest.TestCase):
 
     def test_public_home_private_programs_and_images(self):
         anon=Client(self.base); status,home,headers=anon.get('/')
-        self.assertEqual(status,200);self.assertEqual(headers['Referrer-Policy'],'no-referrer')
+        self.assertEqual(status,200);self.assertEqual(headers['Referrer-Policy'],'strict-origin')
         for absent in ('Real students. Real scholars. Real futures.','Real moments from real learners.','NESA','photo-gallery','students-library.jpg','https://africanscholars.yale.edu'):
             self.assertNotIn(absent,home)
         for present in ('Moments along the learning journey.','id="slideshow"','ilead-students.jpg','university-graduation.jpg','students-reading.jpg',server.HELPLINE_PHONE,server.HELPLINE_EMAIL): self.assertIn(present,home)
