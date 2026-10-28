@@ -1,70 +1,21 @@
-# Windows update and version-check guide
+# Update 70Scholar on Windows
 
-On Windows, `grep` is usually unavailable. Use `findstr` (Command Prompt) or `Select-String`
-(PowerShell).
+Before updating the live Render service, read `RENDER_DEPLOY.md`: a deploy on free ephemeral
+storage may erase live users, projects and files. A local checkout is not a live backup.
 
-## 1. Confirm you have the v17 code
-
-From the project folder:
-
-```bat
-findstr /C:"APP_VERSION = " server.py
-```
-
-You should see the `APP_VERSION = "v17-programs"` line. Then check the supporting files exist:
-
-```bat
-dir static
-findstr /C:"reveal-on-scroll" static\app.js
-findstr /C:"nav-profile" static\styles.css
-findstr /C:"APP_VERSION" server.py
-findstr /C:"10 MB" static\app.js
-```
-
-PowerShell equivalents:
+In PowerShell:
 
 ```powershell
-Select-String -Path server.py -Pattern "APP_VERSION"
-Select-String -Path static\app.js -Pattern "reveal-on-scroll"
-Select-String -Path static\styles.css -Pattern "nav-profile"
+cd C:\path\to\My-Website
+git pull origin main
+$env:ADMIN_PASSWORD = 'a-long-unique-password'
+$env:APP_BASE_URL = 'http://localhost:8080'
+python -m unittest discover -s tests -v
+python server.py
 ```
 
-Also confirm `static\` contains both `styles.css` and `app.js`. If the folder is missing, the
-site will load without styling.
-
-## 2. Run locally
-
-```bat
-py -3 server.py
-```
-
-Open <http://127.0.0.1:8080> and then <http://127.0.0.1:8080/version>. You should see:
-
-```text
-70Scholar v17-programs - featured programs, link previews, organized admin
-```
-
-## 3. Push and redeploy
-
-```bat
-git add .
-git commit -m "Update 70Scholar"
-git push origin main
-```
-
-Render deploys automatically from `main`. If it doesn't, use **Manual Deploy → Clear build
-cache & deploy** in the Render dashboard.
-
-## 4. Check the live version
-
-Open:
-
-```text
-https://seven0scholar-7cjc.onrender.com/version
-```
-
-You must see the same v17 string. Also open `/static/styles.css` — it should return CSS, not a
-404 page.
-
-If the live site still shows an older version or looks unstyled, Render is running old code. See
-`RENDER_DEPLOY.md` → Troubleshooting.
+Open `http://localhost:8080`. Check `/version` for
+`70Scholar v18-privacy - privacy, owner review and funding`. Sign in with the owner account,
+configure email and an owner payment link when ready, and inspect the admin queues. Do not
+store the password in a committed file. Existing accounts may require email verification or
+an owner grant; existing projects must be reapproved after the v18 migration.

@@ -558,10 +558,11 @@ tr:last-child td { border-bottom: 0; }
 .admin-main .table-wrap { overflow-x: auto; }
 .admin-hero { margin-bottom: 0; }
 @media (max-width: 980px) {
-  .admin-shell { grid-template-columns: 1fr; }
-  .admin-sidebar { position: static; }
+  .admin-shell { grid-template-columns: minmax(0, 1fr); }
+  .admin-sidebar { position: static; min-width: 0; }
   .admin-nav { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
-  .admin-main { grid-template-columns: 1fr; }
+  .admin-main { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+  .admin-main .stats-row { min-width: 0; }
   .admin-main .dash-panel.wide, .admin-main .admin-group-title, .admin-main .stats-row { grid-column: auto; }
 }
 @media (max-width: 700px) {
@@ -570,3 +571,24 @@ tr:last-child td { border-bottom: 0; }
   .submit-layout { grid-template-columns: 1fr; }
   .program-teasers { grid-template-columns: 1fr; }
 }
+
+/* v18 — private projects, review and guided submission */
+.form-mode-switch { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1rem; }
+.form-mode-switch a { padding:.65rem 1rem; border-radius:999px; border:1px solid #c8d1d8; color:#1c3544; font-weight:700; text-decoration:none; }
+.form-mode-switch a.selected { background:#153e50; color:#fff; border-color:#153e50; }
+.project-builder fieldset { border:1px solid #d5e2e6; border-radius:16px; padding:1.25rem; margin:0 0 1rem; min-width:0; }
+.project-builder fieldset[hidden], .wizard-controls[hidden], [data-wizard-submit][hidden], .wizard-controls button[hidden] { display:none !important; }
+.project-builder legend { font-family:'Fraunces',serif; font-size:1.25rem; font-weight:600; padding:0 .4rem; }
+.project-builder legend span { color:#008479; font-family:'Manrope',sans-serif; font-size:.8rem; letter-spacing:.08em; margin-right:.45rem; }
+.wizard-controls { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:0 0 1rem; }
+.wizard-controls [data-wizard-progress] { color:#536a71; font-size:.88rem; font-weight:700; }
+.message-rules { padding-left:1.25rem; line-height:1.6; color:#31434a; }
+.message-rules li { padding-left:.2rem; margin:.3rem 0; }
+.funding-unavailable { background:#fff6e5; border:1px solid #e4c68c; color:#664b1e; border-radius:12px; padding:1rem; }
+.admin-project-detail,.admin-private-text { white-space:normal; overflow-wrap:anywhere; line-height:1.55; }
+.admin-private-text { background:#fff5e9; border-radius:8px; padding:.7rem; }
+.moderation-card details { margin:.8rem 0; }
+.moderation-card summary { cursor:pointer; font-weight:700; }
+.admin-main .builder-form .admin-review-note { display:flex; flex-direction:row; gap:.5rem; align-items:flex-start; }
+.admin-main .admin-review-note input[type=checkbox] { width:auto; margin:.25rem 0 0; }
+@media (max-width:640px) { .wizard-controls { flex-wrap:wrap; } .project-builder fieldset { padding:1rem; } }

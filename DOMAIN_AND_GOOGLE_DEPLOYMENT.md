@@ -1,3 +1,5 @@
+> **v18 note:** New private uploads are not offloaded to Cloudinary. See `CLOUD_UPLOADS.md` and `RENDER_DEPLOY.md` for current storage and backup guidance.
+
 # Domains, Google Search, and deployment for 70Scholar
 
 ## 1. Choosing a domain

@@ -1,44 +1,38 @@
-# Homepage photo gallery — NESA Rwanda
+# Slideshow image provenance and permission checklist
 
-The seven homepage photos are **real photographs** (not AI-generated) taken from the public
-website of Rwanda's **National Examination and School Inspection Authority (NESA)**:
-<https://www.nesa.gov.rw/>.
+The old seven-photo static homepage gallery was removed; the slideshow remains. The website
+itself does not display source or credit lines below the images. Keep this file as an
+operational provenance record (the repository may itself be public).
 
-They show real Rwandan students, teachers, and education officials — which matches the
-70Scholar mission far better than generic stock photography.
+## New slideshow photos
 
-## Files in `static/images/`
+All of the following were downloaded from Pexels and are photographs, not generated images.
+Pexels says they are free for website use and do not require attribution; its terms prohibit
+implying endorsement and other uses. Confirm the current licence and any needed consent
+before use, especially for identifiable minors.
 
-| # | File | Caption shown | Source on nesa.gov.rw |
-| --- | --- | --- | --- |
-| 1 | `students-library.jpg` | Rwanda's students | `/fileadmin/user_upload/NESA/Background_Images/WEB_2026.jpeg` |
-| 2 | `students-classroom.jpg` | In the classroom | `/fileadmin/user_upload/NESA/Background_Images/WEB_2026_6.jpeg` |
-| 3 | `student-chalkboard.jpg` | Every scholar has a voice | `/fileadmin/user_upload/NESA/Background_Images/WEB_2026_2.jpeg` |
-| 4 | `students-collaborating.jpg` | Learning together | `/fileadmin/user_upload/NESA/Background_Images/WEB_2026_4.jpeg` |
-| 5 | `teacher-and-students.jpg` | Teachers who open doors | `/fileadmin/user_upload/NESA/Background_Images/WEB_2026_7.jpeg` |
-| 6 | `official-with-student.jpg` | Leaders investing in learners | News: *MINEDUC yatangije Ibizamini bya Leta… 2025/2026* (`csm_HMnpSdOW4AAvCKJ_1d2b681752.jpg`) |
-| 7 | `education-leaders.jpg` | National commitment | `/fileadmin/user_upload/NESA/Background_Images/WEB_2026_1_1.jpeg` |
+| Local file | Pexels source | Listed photographer / subject |
+| --- | --- | --- |
+| `ilead-students.jpg` | <https://www.pexels.com/photo/29942773/> | iLead Rwanda, students outside a school |
+| `ilead-classmates.jpg` | <https://www.pexels.com/photo/two-students-posing-in-school-uniform-outdoors-30649794/> | iLead Rwanda, classmates |
+| `students-reading.jpg` | <https://www.pexels.com/photo/group-of-students-reading-a-book-10638213/> | Ron Lach, students reading; **not verified as an iLead book** |
+| `university-graduation.jpg` | <https://www.pexels.com/photo/standing-students-in-academic-dress-15490406/> | Safari Consoler, university graduates |
+| `graduation-speech.jpg` | <https://www.pexels.com/photo/woman-in-a-graduation-gown-giving-a-speech-and-smiling-12496871/> | Amos Getanda, a graduate speaking |
 
-Images were downloaded at 1600px/1000px, then resized to ≤1200px and optimised to ~90–170 KB
-each so the page stays fast on mobile connections.
+Pexels licence: <https://www.pexels.com/license/>. iLead Rwanda's Pexels profile:
+<https://www.pexels.com/@ilead-rwanda-2148150079/>. The captions do not claim that the
+people or organizations endorse 70Scholar. The iLead Rwanda source is identified by its
+Pexels profile; the displayed photos are not verified to have come from an iLead book.
+A picture of an actual iLead curriculum booklet is visible at
+<https://leadershiptb.org/ilead/>, but no reuse licence for that image was established, so
+it was not copied. Obtain permission or an owner-supplied image before adding it.
 
-> ⚠️ **Copyright / permission.** These images are published on a Rwandan government website.
-> They are credited to NESA on the homepage, but there is **no explicit open licence** stated on
-> the site. Before using them on a commercial or high-traffic public site, contact
-> **info@nesa.gov.rw** to request permission, or replace them with photos you own. This is
-> especially important because the images show identifiable students (minors).
+## Earlier slideshow photos retained at the user's request
 
-They are **not** photographs of Isomo Academy, Yale, ESCM, or a specific Minister of Education
-with a named student. The captions describe the themes honestly rather than claiming
-institutional affiliation or endorsement.
-
-## To use your own photos instead
-
-1. Prepare 7 JPEG/PNG images, ideally 1200px wide, landscape 3:2 or 4:3.
-2. Replace the files in `static/images/` using the exact filenames in the table above.
-3. Edit `HOMEPAGE_PHOTOS` in `server.py` to update `w`, `h`, `alt`, `caption` and `note`.
-4. Bump `APP_VERSION` in `server.py` so browsers reload the new images.
-5. Commit and push — Render auto-deploys from `main`.
-
-If you have fewer than 7 photos, remove entries from `HOMEPAGE_PHOTOS`; the grid reflows
-automatically. See also `static/styles.css` → `.gallery-grid` for layout tweaks.
+`slide-01.jpg` through `slide-12.jpg` were obtained previously from the website of Rwanda's
+National Examination and School Inspection Authority (NESA), <https://www.nesa.gov.rw/>.
+No express open licence for those pictures was established. Some include identifiable
+students. Before continuing to use them on a public site, obtain permission and any required
+consent, or replace them with properly licensed/owner-supplied photos. Removing source wording
+from the site does not itself grant permission. Consult the repository history for the
+original source-path details.

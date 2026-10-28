@@ -1,9 +1,8 @@
 # Render Blueprint for 70Scholar.
 # One-click deploy: https://render.com/deploy?repo=https://github.com/Mukunzi7/My-Website
 # Secrets use "sync: false" so Render prompts for them instead of storing them in Git.
-# The service name IS the free host name: https://70scholar.onrender.com
-# If Render ever rejects a name starting with a digit, use "scholar70" instead and
-# update APP_BASE_URL in every doc to match.
+# Current deployed host: https://seven0scholar-7cjc.onrender.com
+# The actual hostname is the one shown in the Render dashboard.
 services:
   - type: web
     name: 70scholar
@@ -29,17 +28,9 @@ services:
         sync: false
       - key: BIRD_REGION
         sync: false
-      - key: FLUTTERWAVE_PAYMENT_LINK
-        sync: false
-      - key: STRIPE_PAYMENT_LINK
-        sync: false
-      - key: PAYPAL_PAYMENT_LINK
-        sync: false
-      - key: MOMO_PAYMENT_INSTRUCTIONS
-        sync: false
 
 # PERSISTENT STORAGE (recommended before real users sign up):
-# The free plan has no disk, so SQLite and uploads are wiped on every deploy.
+# The free plan has no disk, so SQLite and uploads can be lost during deploy/restart.
 # To enable, upgrade to a paid plan and uncomment both blocks below:
 #
 #    plan: starter          # replace "plan: free" above

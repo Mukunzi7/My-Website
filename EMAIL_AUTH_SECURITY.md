@@ -1,76 +1,23 @@
-# 70Scholar Email Verification and Password Reset
+# Account verification and access
 
-70Scholar now includes production-style account security flows:
+Name, email, phone and password are required at signup. Phone and other account details are
+visible to the account holder and owner admin, not in public project/message views. Configure
+Bird or SMTP and `APP_BASE_URL` to send a verification link. Email is marked verified only
+after a valid, unexpired token is consumed. If the provider is missing, rejects a message or
+fails, the account remains unverified and cannot sign in unless the owner grants access.
 
-- Email verification after signup
-- Login blocked until email is verified
-- Password reset request page
-- Password reset tokens that expire
-- Session invalidation after password reset
+Admin → People → **Grant access** sets a separate `admin_approved` flag; it does not mark the
+email verified. A granted user can request a verification link later from Account settings. The owner can revoke that grant, block/unblock accounts, or reset passwords.
+A blocked account cannot sign in even if it has a verified email or grant; its sessions are
+revoked. Security filters can be imperfect and need review. Password reset uses the configured
+email provider. Verification/reset tokens are hashed in SQLite, expire, are single-use and
+are redacted from server request logs.
 
-## Local development
+The one-time v18 migration distrusts older auto-verified accounts unless a used verification
+token provides evidence. Those accounts must verify again or receive an explicit owner grant.
+Existing sessions for accounts without access are removed. The demo account is disabled.
+The old predictable owner default password is disabled; set `ADMIN_PASSWORD` in Render.
 
-If SMTP is not configured, 70Scholar writes emails to:
-
-```text
-mail_outbox.log
-```
-
-After signup, open that file and copy the verification link.
-
-## Production SMTP environment variables
-
-Set these in your hosting provider:
-
-```bash
-APP_BASE_URL=https://www.yourdomain.com
-SMTP_HOST=smtp.your-provider.com
-SMTP_PORT=587
-SMTP_USER=your-smtp-user
-SMTP_PASSWORD=your-smtp-password
-SMTP_FROM=noreply@yourdomain.com
-SMTP_TLS=1
-```
-
-Recommended email providers:
-
-- SendGrid
-- Mailgun
-- Amazon SES
-- Brevo
-- Google Workspace SMTP
-
-## Pages added
-
-```text
-/verify-email?token=...
-/forgot-password
-/reset-password?token=...
-```
-
-## Security notes
-
-- Tokens are stored hashed in the database.
-- Verification tokens expire after 48 hours.
-- Password reset tokens expire after 2 hours.
-- Password reset deletes existing login sessions for that user.
-
-## Bird / MessageBird email option
-
-70Scholar now supports Bird email as the first email provider. If `BIRD_API_KEY` is set, 70Scholar sends verification and password-reset emails through Bird. If it is not set, 70Scholar falls back to SMTP, then to `mail_outbox.log` in local development.
-
-Set these environment variables:
-
-```bash
-BIRD_API_KEY=bk_xxxxxxxxx
-BIRD_FROM=onboarding@messagebird.dev
-BIRD_REGION=us1
-```
-
-Replace `bk_xxxxxxxxx` with your real Bird API key in your local `.env` file or hosting dashboard. Do **not** commit the real API key to GitHub. If you pasted a real key in chat or committed it anywhere, rotate/delete it in the Bird dashboard and create a new one.
-
-A TypeScript example is included at:
-
-```text
-examples/bird-email-example.ts
-```
+For public launch, additionally deploy behind HTTPS, add rate limiting/abuse protection,
+use persistent encrypted storage and backups, review privacy laws/consent, and conduct an
+independent security assessment. A Bird/SMTP acceptance response is not proof of delivery.

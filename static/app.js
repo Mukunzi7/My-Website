@@ -154,7 +154,7 @@
           li.appendChild(link);
           list.insertBefore(li, list.firstChild);
         }
-        setStatus(assetStatus, 'Uploaded ' + (result.filename || file.name) + '.', 'success');
+        setStatus(assetStatus, 'Uploaded ' + (result.filename || file.name) + (result.review_required ? '. The project now awaits owner review.' : '.'), 'success');
         assetInput.value = '';
       }).catch(function (err) {
         setStatus(assetStatus, err.message, 'error');
@@ -180,6 +180,61 @@
       event.preventDefault();
     }
   });
+
+  /* ---------------------------------------------------- guided project wizard
+     All steps are visible without JavaScript; the full form remains available. */
+  var wizard = $('form[data-wizard="true"]');
+  var revealProjectStep = null;
+  if (wizard) {
+    var steps = $$('.wizard-step', wizard), controls = $('.wizard-controls', wizard);
+    var prev = $('[data-wizard-prev]', wizard), next = $('[data-wizard-next]', wizard);
+    var progress = $('[data-wizard-progress]', wizard), submit = $('[data-wizard-submit]', wizard);
+    var currentStep = 0;
+    function showWizardStep(n) {
+      currentStep = Math.max(0, Math.min(n, steps.length - 1));
+      steps.forEach(function (step, i) { step.hidden = i !== currentStep; });
+      prev.hidden = currentStep === 0;
+      next.hidden = currentStep === steps.length - 1;
+      submit.hidden = currentStep !== steps.length - 1;
+      progress.textContent = 'Step ' + (currentStep + 1) + ' of ' + steps.length;
+    }
+    function nextWizardStep() {
+      var fields = $$('input, textarea, select', steps[currentStep]);
+      for (var i = 0; i < fields.length; i++) {
+        if (!fields[i].checkValidity()) { fields[i].reportValidity(); return; }
+      }
+      showWizardStep(currentStep + 1);
+    }
+    revealProjectStep = showWizardStep;
+    controls.hidden = false;
+    wizard.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' && event.target.tagName === 'INPUT' && currentStep < steps.length - 1) {
+        event.preventDefault(); nextWizardStep();
+      }
+    });
+    prev.addEventListener('click', function () { showWizardStep(currentStep - 1); });
+    next.addEventListener('click', nextWizardStep);
+    wizard.addEventListener('submit', function (event) {
+      if (currentStep < steps.length - 1) {
+        event.preventDefault(); event.stopImmediatePropagation(); nextWizardStep();
+      }
+    });
+    showWizardStep(0);
+  }
+  var projectForm = $('form.project-builder');
+  if (projectForm) {
+    projectForm.addEventListener('submit', function (event) {
+      var visibility = $('[name="status"]', projectForm);
+      if (!visibility || visibility.value !== 'public') return;
+      var summary = $('[name="summary"]', projectForm), details = $('[name="details"]', projectForm);
+      var invalid = summary.value.trim().length < 40 ? summary : (details.value.trim().length < 120 ? details : null);
+      if (!invalid) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      if (revealProjectStep) revealProjectStep(invalid === summary ? 0 : 1);
+      invalid.setCustomValidity(invalid === summary ? 'Please use at least 40 characters for review.' : 'Please use at least 120 characters for review.');
+      invalid.reportValidity(); invalid.setCustomValidity('');
+    });
+  }
 
   /* ---------------------------------------------------- prevent accidental double submits
      NOTE: never disable the buttons here. Many server handlers read the clicked

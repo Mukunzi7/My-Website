@@ -1,207 +1,88 @@
-# Deploy 70Scholar to Render
+# Render deployment and safe upgrade
 
-This is the shortest path from the v17 code in this repo to a live public URL. Render reads the
-`render.yaml` Blueprint in the repo root, so most settings are already filled in.
+The GitHub repository is `Mukunzi7/My-Website`, branch `main`. The Render service name is
+`70scholar`; its currently observed public URL is
+<https://seven0scholar-7cjc.onrender.com>. The URL shown in the Render dashboard is the
+source of truth. The app listens on `0.0.0.0:$PORT` and the health endpoint is `/version`.
 
-> **Order matters:** any push to `main` triggers an automatic redeploy, so finish code
-> changes before inviting users.
+## Before deploying: protect user data
 
----
+The free-plan service declared in `render.yaml` has an ephemeral filesystem. Deploys,
+restarts or instance replacement can erase the live SQLite database and uploads. The copy
+in a developer's workspace is not a backup of Render's live data. Do not deploy over
+important live records until you have exported/backed up the database and files and verified
+that backup. Provision a paid Render service with a persistent disk or migrate to a
+supported persistent database/storage solution; this code currently implements SQLite, not
+PostgreSQL.
 
-## 0. Confirm the code is on GitHub — already done
-
-The v17 code (full `server.py`, `static/`, 70Scholar branding, `render.yaml`) is already
-pushed to `main` on <https://github.com/Mukunzi7/My-Website>. Nothing to do here.
-
-The deploy button always builds whatever is on `main` at the moment you click it, so if you
-make more changes, push them before deploying.
-
-> **Service name:** the Blueprint service is now `70scholar`, giving you the free URL
-> `https://seven0scholar-7cjc.onrender.com`.
->
-> **If you already had a Blueprint screen open that said `learnwella`, abandon it.**
-> Close that tab and re-open the deploy link below — Render reads `render.yaml` fresh
-> from `main` at that moment. If a `learnwella` service was already created, delete it
-> first (Dashboard → service → Settings → Delete); free-tier services hold no
-> persistent data, so nothing is lost. Otherwise Render will create a second service.
-
----
-
-## 1. One-click deploy (recommended)
-
-1. Create a free account at <https://render.com> (sign in with GitHub).
-2. Click this button:
-
-   **[🚀 Deploy to Render](https://render.com/deploy?repo=https://github.com/Mukunzi7/My-Website)**
-
-   Or paste this URL into your browser:
-
-   ```text
-   https://render.com/deploy?repo=https://github.com/Mukunzi7/My-Website
-   ```
-
-3. Render detects `render.yaml` and shows a **Blueprint** preview with one service named
-   `70scholar`. Give the Blueprint a name (e.g. `70scholar`) and click **Apply**.
-4. When prompted, fill in the secret environment variables listed in step 3 below.
-5. Wait for the build (usually 1–3 minutes). Your site will be at:
-
-   ```text
-   https://seven0scholar-7cjc.onrender.com
-   ```
-
-   (Render appends a suffix if that name is taken — use the URL it shows in the dashboard.)
-
----
-
-## 2. Manual deploy (same result)
-
-1. Render dashboard → **New +** → **Web Service**.
-2. **Connect a repository:** choose `Mukunzi7/My-Website` (public). If you don't see it,
-   click *Configure account* and grant Render access to that repo.
-3. Configure:
-
-   | Setting | Value |
-   | --- | --- |
-   | Name | `70scholar` |
-   | Region | Singapore or Frankfurt (closest to Rwanda) |
-   | Branch | `main` |
-   | Runtime | **Python 3** |
-   | Build command | `pip install -r requirements.txt` |
-   | Start command | `python3 server.py` |
-   | Instance type | Free (or Starter if you need a persistent disk — see step 5) |
-   | Health check path | `/version` |
-
-4. Add the environment variables below, then click **Create Web Service**.
-
----
-
-## 3. Environment variables (set these before the first deploy)
-
-In Render: your service → **Environment** → **Add Environment Variable**.
-
-| Key | Value | Why |
-| --- | --- | --- |
-| `HOST` | `0.0.0.0` | Required; otherwise Render reports "No open ports detected" |
-| `PORT` | `10000` | Render injects this automatically; set it explicitly if your plan doesn't |
-| `APP_BASE_URL` | `https://seven0scholar-7cjc.onrender.com` | Base URL used in verification emails and `sitemap.xml` (no trailing slash) |
-| `ADMIN_EMAIL` | your real email | Owner admin created on first boot |
-| `ADMIN_PASSWORD` | a long unique password | **Critical.** The built-in default is public in the code |
-| `BIRD_API_KEY` | `bk_…` | Sends verification / password-reset emails |
-| `BIRD_FROM` | `onboarding@messagebird.dev` | Verified Bird sender |
-| `BIRD_REGION` | `us1` or `eu1` | Usually auto-detected from the key prefix |
-
-Optional: `BIRD_REGION`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`,
-`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_UPLOAD_PRESET`, `MOMO_PAYMENT_INSTRUCTIONS`,
-`FLUTTERWAVE_PAYMENT_LINK`, `STRIPE_PAYMENT_LINK`, `PAYPAL_PAYMENT_LINK`, `MOMO_PAYMENT_LINK`,
-`MAX_UPLOAD_BYTES`, `DB_PATH`, `UPLOAD_DIR`.
-
-> ⚠️ **Email is mandatory for real users.** Signup requires email verification and login is
-> blocked until it succeeds. With no Bird/SMTP key, links are written to `mail_outbox.log`
-> inside the container — your users will never see them. Set `BIRD_API_KEY` before inviting
-> anyone. Details: `BIRD_EMAIL_SETUP.md`.
-
-> ⚠️ **Never put secrets in `render.yaml` or `.env.example`.** Those files are public. The
-> Blueprint marks secrets `sync: false` so Render asks you for them at deploy time.
-
----
-
-## 4. Persistent storage (do this before real users sign up)
-
-Render's container filesystem is **ephemeral**: every deploy or restart wipes
-`edubridge.sqlite3` and `uploads/`. That means accounts, projects, pledges, and uploaded files
-disappear.
-
-**Best quick fix — a Render Disk** (requires a paid Starter plan, ~$7/month):
-
-1. Upgrade the service to **Starter** or higher.
-2. Service → **Disks** → **Add Disk**:
-   - Name: `data`
-   - Mount path: `/var/data`
-   - Size: `1 GB` (increase later)
-3. Add two environment variables:
-
-   ```text
-   DB_PATH=/var/data/70scholar.sqlite3
-   UPLOAD_DIR=/var/data/uploads
-   ```
-
-   `server.py` now reads both, so the database and uploaded files survive deploys.
-4. **Manual Deploy** once to apply, then confirm `/version` still responds.
-
-If you want to add the disk directly to the Blueprint instead, change `plan: free` to
-`plan: starter` in `render.yaml` and add:
-
-```yaml
-    disk:
-      name: data
-      mountPath: /var/data
-      sizeGB: 1
-```
-
-and add `DB_PATH` / `UPLOAD_DIR` to `envVars`.
-
-**Better long-term fix:** migrate to Render PostgreSQL (schema in `database_postgresql.sql`)
-and Cloudinary/S3 for files (`CLOUD_UPLOADS.md`, `POSTGRESQL_SETUP.md`). Take regular backups
-either way — a disk is not a backup.
-
----
-
-## 5. Verify the deployment
-
-| Check | Expected |
-| --- | --- |
-| `https://seven0scholar-7cjc.onrender.com/` | Styled 70Scholar landing page (dark hero, gold buttons) |
-| `…/version` | `70Scholar v17-programs - featured programs, link previews, organized admin` |
-| `…/static/styles.css` | 200, CSS text (if 404, the `static/` folder wasn't pushed) |
-| `…/static/app.js` | 200, JS text |
-| `…/opportunities` | Directory with seeded listings |
-| `…/signup` | Signup form; verification email arrives via Bird |
-| `…/robots.txt`, `…/sitemap.xml` | Valid files using your `APP_BASE_URL` |
-
-If `/version` still shows an older version or the pages are unstyled, Render is building old code:
-confirm the push landed on `main`, then use **Manual Deploy → Clear build cache & deploy**.
-
-**Free-tier note:** free web services spin down after 15 minutes of inactivity, so the first
-request after a pause can take 30–50 seconds. A paid plan removes the cold start.
-
----
-
-## 6. Custom domain and Google
-
-1. Render → your service → **Settings** → **Custom Domains** → **Add Custom Domain**
-   (e.g. `70scholar.rw` or `www.70scholar.com`).
-2. At your registrar, add the **CNAME / A records** Render shows. Render provisions a free
-   Let's Encrypt HTTPS certificate automatically (allow up to ~24h for DNS).
-3. Update `APP_BASE_URL` to `https://yourdomain.com` and redeploy — verification links and
-   `sitemap.xml` will then use the real domain.
-4. Google Search Console → add the domain property → verify via DNS → submit
-   `https://yourdomain.com/sitemap.xml`.
-
-More detail: `DOMAIN_AND_GOOGLE_DEPLOYMENT.md`.
-
----
-
-## 7. Day-to-day workflow
+For a Render disk mounted at `/var/data`, set:
 
 ```text
-edit code → git commit → git push origin main → Render auto-deploys (Auto-Deploy is ON by default)
+DB_PATH=/var/data/70scholar.sqlite3
+UPLOAD_DIR=/var/data/uploads
 ```
 
-Watch **Logs** in the Render dashboard during a deploy. Every page links `/version`, so you can
-always confirm which build is live.
+A disk is not a backup. Back up both the SQLite file and uploads independently, with a
+consistent SQLite backup procedure (e.g. stop writes or use SQLite's backup API), test
+restores, and secure the backup. Migrating existing Render files to a new disk requires
+access to the running instance and an explicit transfer; merely adding `DB_PATH` does not
+copy the old database. Copy the contents of the old `uploads` folder into the new
+`UPLOAD_DIR`, preserving the generated filenames; the server can locate legacy flat filenames
+after the move. Verify the migrated downloads as the owner before removing the old files.
 
----
+## Required configuration
 
-## 8. Troubleshooting
+- `ADMIN_EMAIL=honoremukunzi6@gmail.com` — the app hard-locks admin access to this email.
+- `ADMIN_PASSWORD` — a strong, unique owner password, stored only as a Render secret. The old
+  `Admin123!` default is refused. If the owner account was bootstrapped without a suitable
+  password, set this variable and restart; the locked account can then be initialized. Once
+  a real password is in use, changing this variable alone does not overwrite that password.
+- `APP_BASE_URL=https://seven0scholar-7cjc.onrender.com` or the real custom HTTPS URL.
+- Configure either Bird (`BIRD_API_KEY`, verified-domain `BIRD_FROM`, optionally
+  `BIRD_REGION`) or SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`,
+  `SMTP_FROM`, `SMTP_TLS`) to deliver verification/reset emails. Bird's onboarding sender is
+  sandbox-restricted; see `BIRD_EMAIL_SETUP.md`.
+- Set `DB_PATH` and `UPLOAD_DIR` to a persistent disk after arranging a safe data migration.
 
-| Symptom | Fix |
-| --- | --- |
-| `No open ports detected on 0.0.0.0` | Set `HOST=0.0.0.0`; confirm `PORT` matches Render's value |
-| `Unsupported method ('HEAD')` | Fixed — `server.py` implements `do_HEAD` for health checks |
-| Blank/unstyled pages | `static/` folder missing from GitHub; push `styles.css` and `app.js` |
-| Nothing served at all / import error | You deployed an old commit with the truncated 57-line `server.py`; redeploy from `main` |
-| Users can't log in after signup | No email provider configured — set `BIRD_API_KEY` and `BIRD_FROM` |
-| Verification link points to `127.0.0.1` | Set `APP_BASE_URL` to your public HTTPS URL |
-| Accounts/projects vanish after deploy | Add a Render Disk + `DB_PATH` / `UPLOAD_DIR` (step 4) |
-| Uploads fail on large files | Host/browser limits; offload to Cloudinary (`CLOUD_UPLOADS.md`) |
-| Old version still live | Check the GitHub commit, clear build cache, redeploy |
+Payment links are not deployment secrets: the owner configures their own HTTPS checkout
+link from **Admin → Funding**. No funding action is available before that.
+
+## v18 migration impact
+
+After a safe backup, deploy the updated commit. The first startup with an existing database:
+
+- requires legacy accounts to verify or receive an owner access grant unless a genuinely used
+  verification token exists;
+- moves formerly public projects into the owner-review queue; hides older messages pending
+  review; and treats previous demo-paid records as unverified;
+- disables the shared-password legacy demo account and any insecure default owner password.
+
+These changes are intentional and one-time. They are not a substitute for backups. Review
+all project text, uploads and older messages before publishing; disabling old Cloudinary
+uploads does not revoke old externally hosted copies.
+
+## Verify deployment
+
+1. Check Render deployment status and logs, then open
+   <https://seven0scholar-7cjc.onrender.com/version>. Expected:
+   `70Scholar v18-privacy - privacy, owner review and funding`.
+2. In a private browser, `/programs` should redirect to login; the homepage should show the
+   slideshow and no seven-image gallery or official program links.
+3. Log in as owner, set an owner payment link if ready, and inspect review/user counts. Verify
+   signup with an external email inbox or explicitly grant a test account access.
+4. Test moderation, approval, and a **test** payment request. Do not mark a real payment
+   confirmed until the provider record has been checked. A return from checkout proves nothing.
+5. Check the logs for email delivery errors. Protect any personal data in admin screenshots,
+   backups, and the provider dashboard.
+
+## Troubleshooting
+
+- Login fails for old users: check email-verification evidence, access grant and block status.
+- No verification email: check actual provider credentials, verified sender, region,
+  `APP_BASE_URL`, spam folder, provider delivery events and sandbox restrictions.
+- Admin cannot log in: verify the owner email and strong `ADMIN_PASSWORD`; for an existing
+  changed password use the configured recovery process rather than assuming env overwrites it.
+- Data disappeared: restore the independent backup. Git and the code workspace do not contain
+  a copy of live private records.
+- Funding unavailable: enter a valid owner HTTPS checkout link in Admin. Its ownership and
+  transactions require independent verification.

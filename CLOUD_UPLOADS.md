@@ -1,36 +1,16 @@
-# 70Scholar Cloud Uploads
+# Project upload storage and privacy
 
-70Scholar now supports optional cloud uploads through Cloudinary unsigned uploads.
+New v18 project uploads are stored in `UPLOAD_DIR` on the server. The old optional unsigned
+Cloudinary upload path is disabled so a new private draft is not automatically sent to a
+public third-party bucket. Owner/admin access is required until the project is approved;
+public downloads have generic filenames. The owner must inspect every attachment for private
+information before approval. Automated text filters cannot inspect images, videos, PDFs,
+archives or their metadata.
 
-By default, files are saved locally in:
+A persistent disk and independent backups are necessary. Render's free filesystem can be
+replaced during a deployment, destroying local uploads. Set `UPLOAD_DIR=/var/data/uploads`
+only after mounting a persistent disk. See `RENDER_DEPLOY.md`.
 
-```text
-uploads/
-```
-
-If Cloudinary environment variables are set, uploaded project files are also uploaded to Cloudinary and 70Scholar stores the cloud URL. Downloads redirect to the cloud file URL.
-
-## Environment variables
-
-```bash
-CLOUDINARY_CLOUD_NAME=your-cloud-name
-CLOUDINARY_UPLOAD_PRESET=your-unsigned-upload-preset
-```
-
-## Cloudinary setup
-
-1. Create a Cloudinary account.
-2. Go to Settings → Upload.
-3. Create an unsigned upload preset.
-4. Add the preset name and cloud name to your hosting environment variables.
-5. Restart/redeploy 70Scholar.
-
-## Production recommendation
-
-Cloudinary is easy for an MVP. Later, for more control, migrate to:
-
-- Google Cloud Storage
-- Cloudflare R2
-- Amazon S3
-
-The current code is structured so the upload step can be replaced with another provider later.
+**Existing external copies:** A previous version may already have uploaded files to an
+unsigned Cloudinary preset. Disabling new uploads does not revoke those old URLs. Review and
+remove or secure any existing third-party objects directly with the provider.

@@ -1,79 +1,28 @@
-# Bird / MessageBird Email Setup for 70Scholar
+# Bird or SMTP setup
 
-70Scholar now supports Bird email for:
+70Scholar sends real verification and password-reset links only when a delivery provider is
+configured. Failure or an absent provider does not verify accounts; the owner can separately
+grant access under Admin → People.
 
-- Email verification
-- Password reset emails
+## Bird
 
-## Important security warning
+1. Create a scoped regional Bird email API key. Store it only in Render environment variables,
+   never in Git or chat. If a key was exposed, revoke it and create a new one.
+2. Verify a sending domain in Bird, then set `BIRD_FROM` to an address on that domain.
+   `onboarding@messagebird.dev` is limited to sandbox recipients and verified members of the
+   Bird workspace, so it cannot serve ordinary public registrations.
+3. Set `BIRD_API_KEY`, optionally `BIRD_REGION=us1` or `eu1` (must match the key), and
+   `APP_BASE_URL=https://seven0scholar-7cjc.onrender.com` (or the actual custom domain).
+4. Use an actual outside inbox to sign up and click the verification link. API acceptance
+   is asynchronous and is not proof of delivery; check Bird delivery events if necessary.
 
-Do **not** hardcode your real Bird API key in `server.py` or commit it to GitHub.
+The app uses `POST https://{region}.platform.bird.com/v1/email/messages`, classifies messages
+as transactional, and disables click/open tracking for authentication links. Official guides:
+<https://bird.com/docs/guides/email/sending-email> and
+<https://bird.com/docs/get-started/send-your-first-email>.
 
-Use this placeholder in code/docs:
+## SMTP alternative
 
-```text
-bk_xxxxxxxxx
-```
-
-Then replace it only in your local `.env` file or your hosting provider's environment variables.
-
-If you pasted a real key into chat, GitHub, or any public place, rotate/delete it in the Bird dashboard and create a new key.
-
-## Environment variables
-
-Set:
-
-```bash
-BIRD_API_KEY=bk_xxxxxxxxx
-BIRD_FROM=onboarding@messagebird.dev
-BIRD_REGION=us1
-APP_BASE_URL=https://www.yourdomain.com
-```
-
-Replace `bk_xxxxxxxxx` with your real Bird API key.
-
-If your key starts with `bk_us1_`, use:
-
-```bash
-BIRD_REGION=us1
-```
-
-If your key starts with `bk_eu1_`, use:
-
-```bash
-BIRD_REGION=eu1
-```
-
-70Scholar can auto-detect `us1` or `eu1` from the key prefix, so `BIRD_REGION` is optional.
-
-## How it works in the Python app
-
-The existing `send_email()` function now checks providers in this order:
-
-1. Bird API if `BIRD_API_KEY` is set
-2. SMTP if `SMTP_HOST` is set
-3. Local development outbox: `mail_outbox.log`
-
-So after you set `BIRD_API_KEY`, verification and reset emails automatically use Bird.
-
-## TypeScript example
-
-A TypeScript example was added here:
-
-```text
-examples/bird-email-example.ts
-```
-
-Install the SDK if you want to run the TypeScript example separately:
-
-```bash
-npm install @messagebird/sdk
-```
-
-Then run it with your environment variable set:
-
-```bash
-BIRD_API_KEY=bk_xxxxxxxxx npx tsx examples/bird-email-example.ts
-```
-
-Again, replace `bk_xxxxxxxxx` with your real key locally only.
+Leave `BIRD_API_KEY` unset; set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`,
+`SMTP_FROM`, `SMTP_TLS`, and `APP_BASE_URL`. Use a verified sender and TLS. Test with a real
+mailbox. A provider failure leaves the user unverified rather than granting access.
