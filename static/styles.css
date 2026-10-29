@@ -493,9 +493,14 @@ tr:last-child td { border-bottom: 0; }
 /* v17 — profile, helpline, signup, programs, organized admin */
 .nav-username { color: var(--ink); font-size: .82rem; font-weight: 800; margin-left: -.45rem; white-space: nowrap; }
 .nav-profile { flex: 0 0 auto; }
-.helpline { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem 1.3rem; padding: 1rem 0; border-top: 1px solid rgba(246,243,236,.16); border-bottom: 1px solid rgba(246,243,236,.16); margin-top: .5rem; }
-.helpline-label { color: var(--gold); font-size: .78rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-.helpline a { color: #F6F3EC; font-weight: 700; text-decoration: none; font-size: .94rem; }
+.helpline { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .65rem 1.3rem; padding: 1rem 0; border-top: 1px solid rgba(246,243,236,.16); border-bottom: 1px solid rgba(246,243,236,.16); margin-top: .5rem; }
+.helpline-label { color: var(--gold); font-size: .78rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; padding-top: .2rem; }
+.helpline-contacts { display: flex; flex-direction: column; align-items: flex-start; gap: .45rem; min-width: 0; }
+.helpline-email-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .8rem; min-width: 0; }
+.helpline a { color: #F6F3EC; font-weight: 700; text-decoration: none; font-size: .94rem; overflow-wrap: anywhere; }
+.helpline-phone, .helpline-email { display: inline-flex; align-items: center; gap: .4rem; }
+.contact-icon { width: 1rem; height: 1rem; flex: 0 0 auto; }
+.helpline-email-row .helpline-email-app { color: #C7CDE0; font-size: .76rem; font-weight: 600; text-decoration: underline; }
 .helpline a:hover { color: var(--gold); text-decoration: underline; }
 .req { color: var(--danger); font-weight: 800; }
 .optional, .form-hint { color: var(--muted); font-size: .78rem; font-weight: 600; }

@@ -7,8 +7,10 @@ the workspace and marketplace require an account with access.
 
 - Live service: <https://seven0scholar-7cjc.onrender.com>
 - Owner admin: **honoremukunzi6@gmail.com** (the only permitted admin)
-- Helpline: **0726495648** · **honoremukunzi6@gmail.com**
-- Deployment check: `/version` → `70Scholar v20-logo-hero - privacy, owner review and funding`
+- Helpline: **+250 783 958 599** · **honoremukunzi6@gmail.com**
+- Deployment check: `/version` → `70Scholar v21-contact - privacy, owner review and funding`
+- The footer email address opens a Gmail compose window addressed to the helpline;
+  **Use email app** opens a `mailto:` link for other mail clients.
 
 ## Manage the homepage slideshow
 

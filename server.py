@@ -25,7 +25,7 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 APP_NAME = "70Scholar"
-APP_VERSION = "v20-logo-hero"
+APP_VERSION = "v21-contact"
 COMPANY_NAME = "Nexus Company Ltd"
 APP_TAGLINE = "Find the opportunity. Show the build. Start the conversation."
 OWNER_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "honoremukunzi6@gmail.com").strip().lower()
@@ -105,8 +105,8 @@ SMTP_TLS = os.environ.get("SMTP_TLS", "1") != "0"
 BIRD_API_KEY = os.environ.get("BIRD_API_KEY", "")
 BIRD_FROM = os.environ.get("BIRD_FROM", "onboarding@messagebird.dev")
 BIRD_REGION = os.environ.get("BIRD_REGION", "")
-HELPLINE_PHONE = os.environ.get("HELPLINE_PHONE", "0726495648")
-HELPLINE_EMAIL = os.environ.get("HELPLINE_EMAIL", "honoremukunzi6@gmail.com")
+HELPLINE_PHONE = os.environ.get("HELPLINE_PHONE", "+250 783 958 599").strip()
+HELPLINE_EMAIL = os.environ.get("HELPLINE_EMAIL", "honoremukunzi6@gmail.com").strip()
 # Accounts require actual email verification or an explicit owner access grant.
 EMAIL_ENABLED = bool(BIRD_API_KEY or SMTP_HOST)
 MAIL_OUTBOX = ROOT / "mail_outbox.log"
@@ -726,6 +726,9 @@ def brand_logo() -> str:
 
 def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: str = "") -> str:
     logo = brand_logo()
+    phone_link = re.sub(r'[^0-9+]', '', HELPLINE_PHONE)
+    compose_url = 'https://mail.google.com/mail/?' + urlencode({'view': 'cm', 'fs': '1', 'to': HELPLINE_EMAIL})
+    email_app_url = 'mailto:' + quote(HELPLINE_EMAIL, safe='@.+-_')
     if user:
         if "profile_photo_url" in user.keys() and user["profile_photo_url"]:
             avatar = f"<img src='{e(user['profile_photo_url'])}' alt='Profile photo'>"
@@ -738,8 +741,10 @@ def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: s
         nav_auth = "<a class='nav-link' href='/login'>Log in</a><a class='pill small' href='/signup'>Create account</a>"
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="icon" type="image/png" sizes="192x192" href="/static/favicon.png?v={APP_VERSION}"><link rel="shortcut icon" href="/favicon.ico?v={APP_VERSION}"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='courses' else ''}" href="/courses">Courses</a><a class="nav-link {'is-active' if active=='exams' else ''}" href="/exams">Exam prep</a><a class="nav-link {'is-active' if active=='programs' else ''}" href="/programs">Programs</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p>
     <div class="helpline"><span class="helpline-label">Need help?</span>
-      <a href="tel:{HELPLINE_PHONE}">📞 {HELPLINE_PHONE}</a>
-      <a href="mailto:{HELPLINE_EMAIL}">✉️ {HELPLINE_EMAIL}</a></div>
+      <div class="helpline-contacts">
+        <a class="helpline-phone" href="tel:{e(phone_link)}"><svg class="contact-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.3 1.8a2 2 0 0 1-.6 1.8L7.5 8.6a16 16 0 0 0 7.9 7.9l1.3-1.3a2 2 0 0 1 1.8-.6l1.8.3a2 2 0 0 1 1.7 2z"/></svg> {e(HELPLINE_PHONE)}</a>
+        <div class="helpline-email-row"><a class="helpline-email" href="{e(compose_url)}" target="_blank" rel="noopener noreferrer" aria-label="Write an email to {e(HELPLINE_EMAIL)} in Gmail"><svg class="contact-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg> {e(HELPLINE_EMAIL)}</a><a class="helpline-email-app" href="{e(email_app_url)}">Use email app</a></div>
+      </div></div>
     <p class="copyright">© {datetime.now(timezone.utc).year} {COMPANY_NAME}. All rights reserved.</p></footer><script src="/static/app.js?v={APP_VERSION}"></script></body></html>"""
 
 
