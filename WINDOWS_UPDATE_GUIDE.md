@@ -15,7 +15,7 @@ python server.py
 ```
 
 Open `http://localhost:8080`. Check `/version` for
-`70Scholar v19-hero-slideshow - privacy, owner review and funding`. Sign in with the owner account,
+`70Scholar v20-logo-hero - privacy, owner review and funding`. Sign in with the owner account,
 configure email and an owner payment link when ready, and inspect the admin queues. Do not
 store the password in a committed file. Existing accounts may require email verification or
 an owner grant; existing projects must be reapproved after the v18 migration.

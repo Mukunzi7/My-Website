@@ -1,9 +1,11 @@
-# 70Scholar v19 feature guide
+# 70Scholar v20 feature guide
 
 ## Discovery and homepage
 
-- The opening hero includes the owner-supplied group photo while retaining the headline.
-  The owner can add or remove any slideshow photo under **Admin → Slideshow photos**.
+- The opening hero uses the owner-supplied group photo as its background, with a dark
+  overlay for readability. The owner's Seven Scholars emblem replaces the large homepage
+  wordmark and appears in the header, footer and favicon; the platform name remains
+  70Scholar. The owner can add or remove any slideshow photo under **Admin → Slideshow photos**.
   New images appear first; the empty slideshow is hidden. The old cursor-following
   descriptions are removed.
 - The long-scroll homepage retains the rotating slideshow but removes the seven-photo static

@@ -1,73 +1,21 @@
-# Your logo — how to change it
+# 70Scholar logo and favicon
 
-The 70Scholar logo is a real image file, not text baked into the code:
+The owner supplied a Seven Scholars emblem and chose to keep the website name **70Scholar**.
+The emblem is shown in the header, footer and opening homepage section; the prominent
+homepage text wordmark was replaced by the emblem. The headline remains.
 
-```text
-static/images/logo.svg     <- the logo shown in the header and footer
-static/favicon.svg         <- the small browser-tab icon
-```
+- `static/images/seven-scholars-mark.jpg` — square crop of the supplied image, displayed
+  as a circle in the site. It retains the full emblem and its original lettering. The JPEG
+  is re-encoded without the original metadata.
+- `static/favicon.png` — a 192×192 round version used for the browser icon.
+- `static/favicon.ico` — multi-size version also served publicly at `/favicon.ico`.
+- `static/images/hero-school-group.jpg` — the supplied group photo shown as the background
+  of the opening section. An overlay helps text remain readable; browsers crop it to fit.
 
-It is a scalable SVG (vector), so it stays sharp on every screen. The wordmark
-**70Scholar** next to it is HTML text styled by `.logo-text` in `static/styles.css`.
+`APP_VERSION` is included in the asset URLs to encourage browsers to load new files after
+an update. If a browser retains an old favicon, reload the site or clear its cached icon.
+The site's other branding and account/email identifiers remain 70Scholar.
 
-## Show me how (three ways)
-
-### Option A — replace the file with your own logo (easiest)
-
-1. Prepare your logo as an SVG or PNG, roughly square, with a transparent background.
-2. Save it as `static/images/logo.svg` (overwrite the existing file). If you use PNG,
-   save it as `static/images/logo.png` instead and change one line in `server.py`:
-
-   ```python
-   # in brand_logo(), change /static/images/logo.svg to /static/images/logo.png
-   ```
-
-3. Optionally save a square version as `static/favicon.svg` for the browser tab.
-4. Bump `APP_VERSION` in `server.py` (e.g. `v18-privacy` → a new unique version) so browsers
-   reload the new image instead of using the cached one.
-5. Commit and push:
-
-   ```bash
-   git add static/images/logo.svg static/favicon.svg server.py
-   git commit -m "Update logo"
-   git push origin main
-   ```
-
-   Render auto-deploys from `main`. Check the header after the deploy finishes.
-
-### Option B — just change the colours
-
-Open `static/images/logo.svg` in any text editor. The gradient stops are:
-
-```xml
-<stop offset="0" stop-color="#F2A93E"/>   <!-- gold -->
-<stop offset="1" stop-color="#E8768A"/>   <!-- rose -->
-```
-
-Replace those hex values with your own brand colours. The cap shape uses `#10152B`
-(dark ink) — change it there too if you want a different mark colour.
-
-### Option C — change the wordmark text or size
-
-- Text: edit `brand_logo()` in `server.py` — the `<span class='logo-first'>70</span>`
-  and `<span class='logo-last'>Scholar</span>` parts.
-- Size: edit `static/styles.css`:
-
-  ```css
-  .logo      { font-size: clamp(1.9rem, 3.1vw, 2.75rem); }  /* wordmark size */
-  .logo-img  { width: clamp(46px, 5vw, 68px); }              /* logo image size */
-  .brand-display { font-size: clamp(3rem, 8vw, 7rem); }      /* big hero name */
-  ```
-
-## Asking an AI agent to do it
-
-You can simply say: *"Replace the logo with the file I uploaded, make the wordmark blue,
-and push it."* Upload your image into the workspace first, then tell the agent the filename.
-
-## Notes
-
-- Keep the file small (under ~100 KB) so the header loads instantly.
-- SVG is preferred: it scales to any size and is tiny. If you use PNG, export at
-  least 512×512 px so it looks sharp on high-density screens.
-- `static/` is served directly by the app, so any file you put there is reachable at
-  `/static/<filename>`.
+To change the emblem later, prepare a square crop, update the JPEG and both favicon files,
+update `APP_VERSION`, test the homepage on desktop and mobile, and deploy. Only use logos
+and photographs you have permission to publish, including any required consent for children.

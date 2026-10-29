@@ -8,7 +8,7 @@ the workspace and marketplace require an account with access.
 - Live service: <https://seven0scholar-7cjc.onrender.com>
 - Owner admin: **honoremukunzi6@gmail.com** (the only permitted admin)
 - Helpline: **0726495648** · **honoremukunzi6@gmail.com**
-- Deployment check: `/version` → `70Scholar v19-hero-slideshow - privacy, owner review and funding`
+- Deployment check: `/version` → `70Scholar v20-logo-hero - privacy, owner review and funding`
 
 ## Manage the homepage slideshow
 

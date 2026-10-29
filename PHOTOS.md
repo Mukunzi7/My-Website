@@ -7,8 +7,8 @@ operational provenance record (the repository may itself be public).
 ## Owner-supplied homepage hero photo
 
 `static/images/hero-school-group.jpg` was provided directly by the site owner for the
-homepage hero. It has been re-encoded without source metadata and is not cropped. Its
-presence in the repository does not establish publication rights or consent. The owner
+homepage hero. The image file has been re-encoded without source metadata and is not
+cropped, but browsers crop it responsively to fill the opening section. Its presence in the repository does not establish publication rights or consent. The owner
 should obtain appropriate permission and any required consent for identifiable people,
 especially children, before public use.
 

@@ -25,9 +25,10 @@ The product is owned by **Nexus Company Ltd**. Every page footer includes:
 
 ## Logo
 
-`brand_logo()` in `server.py` emits an inline SVG gradient mark (gold → rose, gradient id
-`s70-g`) plus the wordmark `70` + `Scholar`. No image file is needed. `pitch_deck.html`
-uses the same split wordmark. CSS hooks are the generic `.logo-first` / `.logo-last`.
+The owner-supplied Seven Scholars emblem is used in the header, footer, homepage and
+favicon; the site's name remains **70Scholar** by the owner's choice. `brand_logo()` in
+`server.py` pairs the emblem with the `70` + `Scholar` text. See `LOGO.md` for asset paths.
+`pitch_deck.html` remains a historical deck and may use earlier styling.
 
 ## Identifiers deliberately NOT renamed
 

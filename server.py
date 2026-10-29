@@ -25,7 +25,7 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 APP_NAME = "70Scholar"
-APP_VERSION = "v19-hero-slideshow"
+APP_VERSION = "v20-logo-hero"
 COMPANY_NAME = "Nexus Company Ltd"
 APP_TAGLINE = "Find the opportunity. Show the build. Start the conversation."
 OWNER_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "honoremukunzi6@gmail.com").strip().lower()
@@ -55,7 +55,7 @@ TYPEWRITER_WORDS = [
 AUTO_SYNC_INTERVAL_SECONDS = 1800
 # Pages reachable without an account. Everything else requires sign-in.
 PUBLIC_GET_PATHS = {"/", "/login", "/signup", "/verify-email", "/forgot-password",
-                    "/reset-password", "/robots.txt", "/sitemap.xml", "/version", "/slide-image"}
+                    "/reset-password", "/robots.txt", "/sitemap.xml", "/version", "/slide-image", "/favicon.ico"}
 PUBLIC_POST_PATHS = {"/login", "/signup", "/forgot-password", "/reset-password"}
 ACCOUNT_TYPES = ["Student", "Parent / Guardian", "Teacher / Mentor", "Employer / Organisation", "Other"]
 FEATURED_PROGRAMS = [
@@ -721,7 +721,7 @@ def flash(message: str, kind: str = "info") -> str:
     return f"<div class='flash {e(kind)}'>{e(message)}</div>" if message else ""
 
 def brand_logo() -> str:
-    return f"""<img class="logo-img" src="/static/images/logo.svg?v={APP_VERSION}" alt="70Scholar logo" width="68" height="68"><span class='logo-text'><span class='logo-first'>70</span><span class='logo-last'>Scholar</span></span>"""
+    return f"""<img class="logo-img" src="/static/images/seven-scholars-mark.jpg?v={APP_VERSION}" alt="" width="68" height="68"><span class='logo-text'><span class='logo-first'>70</span><span class='logo-last'>Scholar</span></span>"""
 
 
 def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: str = "") -> str:
@@ -736,7 +736,7 @@ def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: s
         nav_auth = f"""<a class="nav-link {'is-active' if active=='dashboard' else ''}" href="/dashboard">Dashboard</a><a class="nav-link {'is-active' if active=='workspace' else ''}" href="/workspace">Workspace</a><a class="nav-link {'is-active' if active=='messages' else ''}" href="/messages">Messages</a><a class="nav-link {'is-active' if active=='submit' else ''}" href="/submit">Add opportunity</a><a class="nav-link {'is-active' if active=='account' else ''}" href="/account">Account</a>{admin_link}{profile_link}<form class="logout-form" action="/logout" method="post"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><button>Log out</button></form>"""
     else:
         nav_auth = "<a class='nav-link' href='/login'>Log in</a><a class='pill small' href='/signup'>Create account</a>"
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v={APP_VERSION}"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='courses' else ''}" href="/courses">Courses</a><a class="nav-link {'is-active' if active=='exams' else ''}" href="/exams">Exam prep</a><a class="nav-link {'is-active' if active=='programs' else ''}" href="/programs">Programs</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p>
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="icon" type="image/png" sizes="192x192" href="/static/favicon.png?v={APP_VERSION}"><link rel="shortcut icon" href="/favicon.ico?v={APP_VERSION}"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='courses' else ''}" href="/courses">Courses</a><a class="nav-link {'is-active' if active=='exams' else ''}" href="/exams">Exam prep</a><a class="nav-link {'is-active' if active=='programs' else ''}" href="/programs">Programs</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p>
     <div class="helpline"><span class="helpline-label">Need help?</span>
       <a href="tel:{HELPLINE_PHONE}">📞 {HELPLINE_PHONE}</a>
       <a href="mailto:{HELPLINE_EMAIL}">✉️ {HELPLINE_EMAIL}</a></div>
@@ -752,7 +752,7 @@ def render_home(user):
             "pledged": conn.execute("SELECT COALESCE(SUM(amount),0) c FROM pledges WHERE status='paid_confirmed'").fetchone()["c"],
         }
     story_section = f'''<section class="story-section"><div class="story-inner"><p class="eyebrow eyebrow-dark">The story 70Scholar is building</p><h2>A path for the student who almost gave up searching.</h2><p>70Scholar was created for students who keep asking, "Where are the scholarships, internships, competitions, sponsors, and people who will believe in my project?" The goal is to make answers easier to find, applications easier to prepare, and student projects easier to support.</p><p>As more students use 70Scholar, this section will grow into a verified wall of wins: scholarships found, internships applied for, jobs reached, sponsors connected, and projects funded. We will share successes only when students confirm them — because trust matters.</p><div class="impact-stats"><div><strong>{stats['opportunities']}</strong><span>opportunities currently listed</span></div><div><strong>{stats['projects']}</strong><span>student projects published</span></div><div><strong>{money(stats['pledged'])}</strong><span>owner-confirmed support</span></div></div></div></section>'''
-    hero_section = f'''<section class="hero" id="hero"><div class="hero-bg-beyond" aria-hidden="true"></div><div class="hero-bg-now" aria-hidden="true"></div><div class="hero-content"><p class="brand-display"><span class="brand-num">70</span><span class="brand-word">Scholar</span></p><p class="eyebrow">Matched to your level. Built to launch.</p><h1>There's a version of your future<br>still waiting to be found.</h1><p class="subhead">70Scholar finds scholarships, internships, grants, and competitions built for where you stand — then gives you a secure workspace to build the projects that get you noticed, funded, or sold.</p><div class="hero-actions"><a href="/opportunities" class="cta-primary">See real open opportunities <span class="arrow">→</span></a><a href="/marketplace" class="cta-secondary">Fund or buy student projects</a></div><p class="hero-micro">Real listings, refreshed from trusted opportunity feeds.</p></div><figure class="hero-photo"><img src="/static/images/hero-school-group.jpg?v={APP_VERSION}" alt="Students and educators together at a school award event" width="1600" height="1066" fetchpriority="high"></figure><div class="scroll-hint" aria-hidden="true"><span></span></div></section>'''
+    hero_section = f'''<section class="hero" id="hero"><img class="hero-background" src="/static/images/hero-school-group.jpg?v={APP_VERSION}" alt="Students and educators together at a school award event" width="1600" height="1066" fetchpriority="high"><div class="hero-content"><img class="hero-logo" src="/static/images/seven-scholars-mark.jpg?v={APP_VERSION}" alt="Seven Scholars logo" width="720" height="720"><p class="eyebrow">Matched to your level. Built to launch.</p><h1>There's a version of your future<br>still waiting to be found.</h1><p class="subhead">70Scholar finds scholarships, internships, grants, and competitions built for where you stand — then gives you a secure workspace to build the projects that get you noticed, funded, or sold.</p><div class="hero-actions"><a href="/opportunities" class="cta-primary">See real open opportunities <span class="arrow">→</span></a><a href="/marketplace" class="cta-secondary">Fund or buy student projects</a></div><p class="hero-micro">Real listings, refreshed from trusted opportunity feeds.</p></div><div class="scroll-hint" aria-hidden="true"><span></span></div></section>'''
     gap_section = '''<section class="gap-section"><p class="eyebrow eyebrow-dark">Why most students miss out</p><p class="gap-statement">Most scholarships don't go unclaimed because nobody qualified. They go unclaimed because the right student never found them — or found them too late to build something strong.</p></section>'''
     journey_section = '''<section class="journey-section" id="journey"><div class="journey-header"><p class="eyebrow">The path across</p><h2>Discover. Build. Launch. Fund.</h2></div><div class="journey-path"><div class="journey-step"><span class="step-number">01</span><h3>Discover</h3><p>Browse real openings and save the ones that fit your country, field, deadline, and level.</p></div><div class="journey-step"><span class="step-number">02</span><h3>Build</h3><p>Keep drafts, pitch text, links, files, and project details in your private account so unfinished work stays safe.</p></div><div class="journey-step"><span class="step-number">03</span><h3>Launch</h3><p>Publish a project to the marketplace, attach a demo or release file, and invite buyers, donors, mentors, or funders.</p></div></div></section>'''
     opportunities_section = '''<section class="opportunities-section"><div class="opp-header"><p class="eyebrow eyebrow-dark">What's waiting on the other side</p><h2>Every door, sorted by which one actually opens for you.</h2></div><div class="opportunity-cards feature-cards"><div class="opp-card"><div class="icon-dot">🎓</div><h3>Scholarships</h3><p>Funding matched to your field, level, and country, with deadlines you can track.</p></div><div class="opp-card"><div class="icon-dot">💼</div><h3>Internships</h3><p>Roles sized for where you actually are in school, not five-year-experience traps.</p></div><div class="opp-card"><div class="icon-dot">🏆</div><h3>Competitions & grants</h3><p>Contests and small grants your project can realistically compete for.</p></div></div></section>'''
@@ -1443,6 +1443,8 @@ class ScholarHandler(BaseHTTPRequestHandler):
         except (TypeError, ValueError): return False
     def do_HEAD(self):
         parsed=urlparse(self.path); path=parsed.path
+        if path == '/favicon.ico': return self.serve_static('/static/favicon.ico', head=True)
+        if path.startswith('/static/'): return self.serve_static(path, head=True)
         if path == '/slide-image': return self.serve_slide_image(parse_qs(parsed.query), head=True)
         user=self.current_user()
         if not path.startswith('/static/') and path not in PUBLIC_GET_PATHS and not self.gate(user): return
@@ -1456,6 +1458,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         if path == "/sitemap.xml": return self.send_plain(self.build_sitemap(), "application/xml")
         if path == "/version": return self.send_plain(f"70Scholar {APP_VERSION} - privacy, owner review and funding", "text/plain")
         if path.startswith("/static/"): return self.serve_static(path)
+        if path == "/favicon.ico": return self.serve_static('/static/favicon.ico')
         if path == "/slide-image": return self.serve_slide_image(query)
         if path.startswith("/uploads/profiles/"):
             if not self.gate(user): return None
@@ -1492,7 +1495,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         if path == "/marketplace": return self.send_html(render_marketplace(user))
         if path == "/project": return self.send_html(render_project_detail(user, query.get("id", [""])[0]))
         return self.send_html(page_shell("Not found", "<section class='panel-section'><h1>Page not found</h1></section>", user), 404)
-    def serve_static(self, path):
+    def serve_static(self, path, head=False):
         target=(STATIC_DIR / path.removeprefix("/static/")).resolve()
         if STATIC_DIR.resolve() not in target.parents or not target.is_file(): self.send_response(404); self.end_headers(); return
         is_bundled_slide = target.parent == (STATIC_DIR / 'images' / 'slides').resolve()
@@ -1505,8 +1508,10 @@ class ScholarHandler(BaseHTTPRequestHandler):
         data=target.read_bytes(); self.send_response(200)
         self.send_header("Content-Type", mimetypes.guess_type(str(target))[0] or "application/octet-stream")
         self.send_header("Content-Length", str(len(data)))
+        self.send_header('X-Content-Type-Options','nosniff')
         if is_bundled_slide: self.send_header('Cache-Control','no-store')
-        self.end_headers(); self.wfile.write(data)
+        self.end_headers()
+        if not head: self.wfile.write(data)
     def serve_slide_image(self, query, head=False):
         raw_id=query.get('id',[''])[0]
         if not raw_id.isdigit() or len(raw_id)>18:
@@ -2188,9 +2193,12 @@ class ScholarHandler(BaseHTTPRequestHandler):
                         (make_auto_description({"type":row["type"],"title":row["title"],"provider":row["provider"],
                           "country":row["country"],"level":row["level"],"deadline":deadline,"summary":summary}), cur.lastrowid))
                 conn.execute("UPDATE opportunity_submissions SET status='approved', reviewed_at=? WHERE id=?", (now_iso(), int(sid)))
-                return self.send_html(render_admin(user, f"Approved and published: {title}"))
-            conn.execute("UPDATE opportunity_submissions SET status='rejected', reviewed_at=? WHERE id=?", (now_iso(), int(sid)))
-        return self.send_html(render_admin(user, "Submission rejected."))
+                message=f"Approved and published: {title}"
+            else:
+                conn.execute("UPDATE opportunity_submissions SET status='rejected', reviewed_at=? WHERE id=?", (now_iso(), int(sid)))
+                message="Submission rejected."
+        # Do not send a success response or render stale admin data until the write commits.
+        return self.send_html(render_admin(user, message))
 
     def handle_admin_delete_opportunity(self, user, form):
         oid=form.get("opportunity_id","")

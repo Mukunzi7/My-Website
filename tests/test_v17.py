@@ -312,8 +312,11 @@ class ScholarTests(unittest.TestCase):
         data={'csrf':self.admin_csrf,'submission_id':sub['id'],'action':'approve'}
         self.assertEqual(self.admin.post('/admin/submission/action',data)[0],400)
         data.update({'confirmed':'1','title':'Reviewed Fellowship','provider':'Example','deadline':'2027-04-30','summary':'An opportunity reviewed by the owner.'})
-        self.assertEqual(self.admin.post('/admin/submission/action',data)[0],200)
+        status,review_page,_=self.admin.post('/admin/submission/action',data)
+        self.assertEqual(status,200)
         self.assertIsNotNone(self.db('SELECT id FROM opportunities WHERE title=?',('Reviewed Fellowship',),True))
+        self.assertNotIn(f"/admin/submission/preview?id={sub['id']}",review_page)
+        self.assertIn('Reviewed Fellowship',review_page)
         for bad in ('http://localhost/','http://127.0.0.1/','http://10.1.2.3/','file:///etc/passwd','https://public.example:8443/'):
             self.assertFalse(server.is_safe_public_url(bad),bad)
         with mock.patch.object(server.socket,'getaddrinfo',return_value=[(2,1,6,'',('93.184.216.34',443)),(2,1,6,'',('127.0.0.1',443))]):

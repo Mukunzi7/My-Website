@@ -49,7 +49,8 @@ link from **Admin → Funding**. No funding action is available before that.
 
 ## Homepage and slideshow update
 
-The homepage hero contains the owner-supplied group photo. Sign in with the owner account
+The homepage hero displays the owner-supplied group photo as a full background and the
+owner's Seven Scholars emblem. The platform name remains 70Scholar. Sign in with the owner account
 and choose **Admin → Slideshow photos** to add or remove pictures. The first v19 startup
 imports the bundled slideshow into the database once; later owner removals are retained if
 that database survives. Uploaded images are normalized and stored inside SQLite. Without a
@@ -75,7 +76,7 @@ uploads does not revoke old externally hosted copies.
 
 1. Check Render deployment status and logs, then open
    <https://seven0scholar-7cjc.onrender.com/version>. Expected:
-   `70Scholar v19-hero-slideshow - privacy, owner review and funding`.
+   `70Scholar v20-logo-hero - privacy, owner review and funding`.
 2. In a private browser, `/programs` should redirect to login; the homepage should show the
    slideshow and no seven-image gallery or official program links.
 3. Log in as owner, set an owner payment link if ready, and inspect review/user counts. Verify
