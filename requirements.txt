@@ -1,2 +1,2 @@
-# 70Scholar currently uses only the Python standard library.
-# Leave this file for Render/Railway/PaaS compatibility.
+# Pillow validates and safely normalizes owner-uploaded slideshow photos.
+Pillow>=11.3.0,<13.0.0

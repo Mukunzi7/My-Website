@@ -8,7 +8,17 @@ the workspace and marketplace require an account with access.
 - Live service: <https://seven0scholar-7cjc.onrender.com>
 - Owner admin: **honoremukunzi6@gmail.com** (the only permitted admin)
 - Helpline: **0726495648** · **honoremukunzi6@gmail.com**
-- Deployment check: `/version` → `70Scholar v18-privacy-r1 - privacy, owner review and funding`
+- Deployment check: `/version` → `70Scholar v19-hero-slideshow - privacy, owner review and funding`
+
+## Manage the homepage slideshow
+
+Sign in as **honoremukunzi6@gmail.com**, open **Admin → Slideshow photos**, choose a JPEG,
+PNG or WebP photo (up to 8 MB) and select **Add photo to slideshow**. An optional description
+appears on the image and serves as accessible text. New pictures appear first. Remove any
+bundled or uploaded image with its **Remove photo** button. An empty slideshow is hidden.
+Only publish photos with the necessary permission and consent, especially for children.
+Photos are resized and stripped of metadata; they and the slideshow selection are stored in
+SQLite. Without persistent storage, uploads and changes can disappear on deploy or restart.
 
 ## Critical: protect live data before deployment
 
@@ -16,14 +26,15 @@ The Render free service's filesystem is ephemeral. A deployment or restart can r
 filesystem and erase the live SQLite database and uploads. The local files in this repository
 are **not** a backup of the live service. Before using real accounts, arrange a persistent
 Render disk (paid service), set `DB_PATH` and `UPLOAD_DIR` to it, and maintain independent,
-tested backups. Back up the live database and files before the v18 deployment. See
+tested backups. Back up the live database and files before any deployment. See
 `RENDER_DEPLOY.md`. Never put user databases, uploads or secrets into Git.
 
 ## Run locally
 
-Python 3.10+ is required; the app has no third-party runtime dependencies.
+Python 3.10+ and Pillow (installed from `requirements.txt`) are required.
 
 ```bash
+python3 -m pip install -r requirements.txt
 export ADMIN_PASSWORD='a-long-unique-secret'
 export APP_BASE_URL='http://localhost:8080'
 python3 server.py

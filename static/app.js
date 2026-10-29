@@ -310,29 +310,6 @@
     go(0); play();
   }
 
-  /* ---------------------------------------------------- cursor-following auto description */
-  var tip = document.createElement('div');
-  tip.id = 'hoverTooltip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip);
-  function moveTip(ev) {
-    var pad = 16, w = tip.offsetWidth, h = tip.offsetHeight;
-    var x = ev.clientX + pad, y = ev.clientY + pad;
-    if (x + w > window.innerWidth - 8) x = ev.clientX - w - pad;
-    if (y + h > window.innerHeight - 8) y = ev.clientY - h - pad;
-    tip.style.left = Math.max(8, x) + 'px';
-    tip.style.top = Math.max(8, y) + 'px';
-  }
-  document.addEventListener('mouseover', function (ev) {
-    var el = ev.target.closest ? ev.target.closest('[data-tooltip]') : null;
-    if (!el) return;
-    tip.textContent = el.getAttribute('data-tooltip') || '';
-    tip.classList.add('is-visible'); moveTip(ev);
-  });
-  document.addEventListener('mousemove', function (ev) { if (tip.classList.contains('is-visible')) moveTip(ev); });
-  document.addEventListener('mouseout', function (ev) {
-    var el = ev.target.closest ? ev.target.closest('[data-tooltip]') : null;
-    if (el && (!ev.relatedTarget || !el.contains(ev.relatedTarget))) tip.classList.remove('is-visible');
-  });
-
   /* ---------------------------------------------------- animated counters */
   var counters = $$('[data-count]');
   if ('IntersectionObserver' in window && counters.length) {
@@ -352,8 +329,14 @@
     counters.forEach(function (c) { co.observe(c); });
   }
 
-  /* ---------------------------------------------------- sticky-header anchor offset */
-  $$('section[id], div[id]').forEach(function (el) {
-    el.style.scrollMarginTop = '86px';
-  });
+  /* Keep anchor headings visible under the actual responsive sticky header. */
+  function setAnchorOffsets() {
+    var header = $('.site-header');
+    var offset = header ? Math.ceil(header.getBoundingClientRect().height) + 16 : 86;
+    $$('section[id], div[id], h2[id]').forEach(function (el) {
+      el.style.scrollMarginTop = offset + 'px';
+    });
+  }
+  setAnchorOffsets();
+  window.addEventListener('resize', setAnchorOffsets);
 })();

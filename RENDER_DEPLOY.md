@@ -47,6 +47,16 @@ after the move. Verify the migrated downloads as the owner before removing the o
 Payment links are not deployment secrets: the owner configures their own HTTPS checkout
 link from **Admin → Funding**. No funding action is available before that.
 
+## Homepage and slideshow update
+
+The homepage hero contains the owner-supplied group photo. Sign in with the owner account
+and choose **Admin → Slideshow photos** to add or remove pictures. The first v19 startup
+imports the bundled slideshow into the database once; later owner removals are retained if
+that database survives. Uploaded images are normalized and stored inside SQLite. Without a
+persistent disk, a deploy or restart can erase both the images and the chosen slideshow;
+back up the database and use persistent storage. Permission and any required consent must
+be obtained before public publication, especially for identifiable minors.
+
 ## v18 migration impact
 
 After a safe backup, deploy the updated commit. The first startup with an existing database:
@@ -65,7 +75,7 @@ uploads does not revoke old externally hosted copies.
 
 1. Check Render deployment status and logs, then open
    <https://seven0scholar-7cjc.onrender.com/version>. Expected:
-   `70Scholar v18-privacy-r1 - privacy, owner review and funding`.
+   `70Scholar v19-hero-slideshow - privacy, owner review and funding`.
 2. In a private browser, `/programs` should redirect to login; the homepage should show the
    slideshow and no seven-image gallery or official program links.
 3. Log in as owner, set an owner payment link if ready, and inspect review/user counts. Verify

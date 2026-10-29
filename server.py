@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """70Scholar MVP: landing + authentication + opportunities + builder workspace + funding marketplace.
 Run: python3 server.py  then open http://127.0.0.1:8080
-No external Python packages required.
+Install dependencies with: python3 -m pip install -r requirements.txt
 """
 from __future__ import annotations
-import base64, hashlib, html, json, ipaddress, math, mimetypes, os, re, secrets, socket, sqlite3, ssl, sys, smtplib, threading, time, urllib.request, http.client, xml.etree.ElementTree as ET
+import base64, hashlib, html, io, json, ipaddress, math, mimetypes, os, re, secrets, socket, sqlite3, ssl, sys, smtplib, threading, time, urllib.request, warnings, http.client, xml.etree.ElementTree as ET
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta, timezone
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from email.message import EmailMessage
+from email.parser import BytesParser
+from email import policy
+from PIL import Image, ImageOps
 from contextlib import contextmanager
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse, urlencode, urljoin
@@ -22,7 +25,7 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 APP_NAME = "70Scholar"
-APP_VERSION = "v18-privacy-r1"
+APP_VERSION = "v19-hero-slideshow"
 COMPANY_NAME = "Nexus Company Ltd"
 APP_TAGLINE = "Find the opportunity. Show the build. Start the conversation."
 OWNER_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "honoremukunzi6@gmail.com").strip().lower()
@@ -31,6 +34,12 @@ if OWNER_ADMIN_EMAIL not in ADMIN_EMAIL_ALLOWLIST:
     OWNER_ADMIN_EMAIL = ADMIN_EMAIL_ALLOWLIST[0]
 SESSION_COOKIE = "edubridge_session"
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", "0"))  # 0 means no 70Scholar app limit for project/media uploads
+# Separate limits for public slideshow pictures; these do not change project uploads.
+MAX_SLIDE_UPLOAD_BYTES = 8 * 1024 * 1024
+MAX_SLIDE_REQUEST_BYTES = MAX_SLIDE_UPLOAD_BYTES + 256 * 1024
+MAX_SLIDE_PIXELS = 36_000_000
+MAX_SLIDES = 80
+MAX_SLIDE_STORAGE_BYTES = 100 * 1024 * 1024
 
 RSS_SOURCES = [
     "https://www.opportunitiesforafricans.com/feed/",
@@ -46,7 +55,7 @@ TYPEWRITER_WORDS = [
 AUTO_SYNC_INTERVAL_SECONDS = 1800
 # Pages reachable without an account. Everything else requires sign-in.
 PUBLIC_GET_PATHS = {"/", "/login", "/signup", "/verify-email", "/forgot-password",
-                    "/reset-password", "/robots.txt", "/sitemap.xml", "/version"}
+                    "/reset-password", "/robots.txt", "/sitemap.xml", "/version", "/slide-image"}
 PUBLIC_POST_PATHS = {"/login", "/signup", "/forgot-password", "/reset-password"}
 ACCOUNT_TYPES = ["Student", "Parent / Guardian", "Teacher / Mentor", "Employer / Organisation", "Other"]
 FEATURED_PROGRAMS = [
@@ -257,6 +266,15 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS moderation_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,admin_id INTEGER REFERENCES users(id) ON DELETE SET NULL,action TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS project_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,name TEXT NOT NULL,email TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS slideshow_photos(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bundled_path TEXT NOT NULL DEFAULT '',
+            data BLOB,
+            caption TEXT NOT NULL DEFAULT '',
+            position INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            CHECK ((bundled_path <> '' AND data IS NULL) OR (bundled_path = '' AND data IS NOT NULL))
+        );
         CREATE TABLE IF NOT EXISTS feed_sources(id INTEGER PRIMARY KEY AUTOINCREMENT,url TEXT NOT NULL UNIQUE,added_at TEXT NOT NULL,last_fetched TEXT NOT NULL DEFAULT '',enabled INTEGER NOT NULL DEFAULT 1);
         CREATE TABLE IF NOT EXISTS opportunity_submissions(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,type TEXT NOT NULL,title TEXT NOT NULL,provider TEXT NOT NULL,country TEXT NOT NULL,level TEXT NOT NULL,deadline TEXT NOT NULL,url TEXT NOT NULL,summary TEXT NOT NULL,tags TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,reviewed_at TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS course_enrolments(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,course_key TEXT NOT NULL,kind TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(user_id,course_key,kind));''')
@@ -367,6 +385,13 @@ def init_db() -> None:
             conn.execute("UPDATE payments SET status='legacy_unverified' WHERE status LIKE 'paid%'")
             conn.execute("DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE banned=1 OR (email_verified=0 AND admin_approved=0))")
             conn.execute("INSERT INTO settings(key,value) VALUES('v18_privacy_migration',?)", (now_iso(),))
+        # Seed the existing bundled pictures exactly once. An empty slideshow is a valid
+        # owner choice, so never repopulate it merely because the table is empty.
+        if not conn.execute("SELECT 1 FROM settings WHERE key='v19_slideshow_seeded'").fetchone():
+            for position, (filename, caption) in enumerate(SLIDESHOW_PHOTOS):
+                conn.execute("INSERT INTO slideshow_photos(bundled_path,caption,position,created_at) VALUES(?,?,?,?)",
+                             (filename, caption, position, now_iso()))
+            conn.execute("INSERT INTO settings(key,value) VALUES('v19_slideshow_seeded',?)", (now_iso(),))
         conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('auto_sync','0')")
         conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('platform_fund','0')")
         for src in RSS_SOURCES:
@@ -591,7 +616,7 @@ def make_auto_description(row) -> str:
     bits = [f"{title} — a {typ.lower()} opportunity from {provider}.",
             f"Eligible level: {level}. Location: {country}. Deadline: {deadline}."]
     if summary: bits.append(summary.strip())
-    bits.append("Hover for details; always confirm dates and eligibility on the official page before applying.")
+    bits.append("Always confirm dates and eligibility on the official page before applying.")
     return " ".join(bits)
 
 def fetch_feed_items(url: str, timeout: int = 10) -> list[dict]:
@@ -706,7 +731,7 @@ def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: s
             avatar = f"<img src='{e(user['profile_photo_url'])}' alt='Profile photo'>"
         else:
             avatar = f"<img src='/static/images/default-avatar.svg?v={APP_VERSION}' alt='Profile picture'>"
-        profile_link = f"<a class='nav-profile {'is-active' if active=='account' else ''}' href='/account' title='Account settings'>{avatar}</a><span class='nav-username'>{e(user['name'].split()[0])}</span>"
+        profile_link = f"<a class='nav-profile {'is-active' if active=='account' else ''}' href='/account' aria-label='Account settings'>{avatar}</a><span class='nav-username'>{e(user['name'].split()[0])}</span>"
         admin_link = f"<a class='nav-link {'is-active' if active=='admin' else ''}' href='/admin'>Admin</a>" if is_admin(user) else ''
         nav_auth = f"""<a class="nav-link {'is-active' if active=='dashboard' else ''}" href="/dashboard">Dashboard</a><a class="nav-link {'is-active' if active=='workspace' else ''}" href="/workspace">Workspace</a><a class="nav-link {'is-active' if active=='messages' else ''}" href="/messages">Messages</a><a class="nav-link {'is-active' if active=='submit' else ''}" href="/submit">Add opportunity</a><a class="nav-link {'is-active' if active=='account' else ''}" href="/account">Account</a>{admin_link}{profile_link}<form class="logout-form" action="/logout" method="post"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><button>Log out</button></form>"""
     else:
@@ -727,7 +752,7 @@ def render_home(user):
             "pledged": conn.execute("SELECT COALESCE(SUM(amount),0) c FROM pledges WHERE status='paid_confirmed'").fetchone()["c"],
         }
     story_section = f'''<section class="story-section"><div class="story-inner"><p class="eyebrow eyebrow-dark">The story 70Scholar is building</p><h2>A path for the student who almost gave up searching.</h2><p>70Scholar was created for students who keep asking, "Where are the scholarships, internships, competitions, sponsors, and people who will believe in my project?" The goal is to make answers easier to find, applications easier to prepare, and student projects easier to support.</p><p>As more students use 70Scholar, this section will grow into a verified wall of wins: scholarships found, internships applied for, jobs reached, sponsors connected, and projects funded. We will share successes only when students confirm them — because trust matters.</p><div class="impact-stats"><div><strong>{stats['opportunities']}</strong><span>opportunities currently listed</span></div><div><strong>{stats['projects']}</strong><span>student projects published</span></div><div><strong>{money(stats['pledged'])}</strong><span>owner-confirmed support</span></div></div></div></section>'''
-    hero_section = '''<section class="hero" id="hero"><div class="hero-bg-beyond" aria-hidden="true"></div><div class="hero-bg-now" aria-hidden="true"></div><div class="hero-content"><p class="brand-display"><span class="brand-num">70</span><span class="brand-word">Scholar</span></p><p class="eyebrow">Matched to your level. Built to launch.</p><h1>There's a version of your future<br>still waiting to be found.</h1><p class="subhead">70Scholar finds scholarships, internships, grants, and competitions built for where you stand — then gives you a secure workspace to build the projects that get you noticed, funded, or sold.</p><div class="hero-actions"><a href="/opportunities" class="cta-primary">See real open opportunities <span class="arrow">→</span></a><a href="/marketplace" class="cta-secondary">Fund or buy student projects</a></div><p class="hero-micro">Real listings, refreshed from trusted opportunity feeds.</p></div><div class="scroll-hint" aria-hidden="true"><span></span></div></section>'''
+    hero_section = f'''<section class="hero" id="hero"><div class="hero-bg-beyond" aria-hidden="true"></div><div class="hero-bg-now" aria-hidden="true"></div><div class="hero-content"><p class="brand-display"><span class="brand-num">70</span><span class="brand-word">Scholar</span></p><p class="eyebrow">Matched to your level. Built to launch.</p><h1>There's a version of your future<br>still waiting to be found.</h1><p class="subhead">70Scholar finds scholarships, internships, grants, and competitions built for where you stand — then gives you a secure workspace to build the projects that get you noticed, funded, or sold.</p><div class="hero-actions"><a href="/opportunities" class="cta-primary">See real open opportunities <span class="arrow">→</span></a><a href="/marketplace" class="cta-secondary">Fund or buy student projects</a></div><p class="hero-micro">Real listings, refreshed from trusted opportunity feeds.</p></div><figure class="hero-photo"><img src="/static/images/hero-school-group.jpg?v={APP_VERSION}" alt="Students and educators together at a school award event" width="1600" height="1066" fetchpriority="high"></figure><div class="scroll-hint" aria-hidden="true"><span></span></div></section>'''
     gap_section = '''<section class="gap-section"><p class="eyebrow eyebrow-dark">Why most students miss out</p><p class="gap-statement">Most scholarships don't go unclaimed because nobody qualified. They go unclaimed because the right student never found them — or found them too late to build something strong.</p></section>'''
     journey_section = '''<section class="journey-section" id="journey"><div class="journey-header"><p class="eyebrow">The path across</p><h2>Discover. Build. Launch. Fund.</h2></div><div class="journey-path"><div class="journey-step"><span class="step-number">01</span><h3>Discover</h3><p>Browse real openings and save the ones that fit your country, field, deadline, and level.</p></div><div class="journey-step"><span class="step-number">02</span><h3>Build</h3><p>Keep drafts, pitch text, links, files, and project details in your private account so unfinished work stays safe.</p></div><div class="journey-step"><span class="step-number">03</span><h3>Launch</h3><p>Publish a project to the marketplace, attach a demo or release file, and invite buyers, donors, mentors, or funders.</p></div></div></section>'''
     opportunities_section = '''<section class="opportunities-section"><div class="opp-header"><p class="eyebrow eyebrow-dark">What's waiting on the other side</p><h2>Every door, sorted by which one actually opens for you.</h2></div><div class="opportunity-cards feature-cards"><div class="opp-card"><div class="icon-dot">🎓</div><h3>Scholarships</h3><p>Funding matched to your field, level, and country, with deadlines you can track.</p></div><div class="opp-card"><div class="icon-dot">💼</div><h3>Internships</h3><p>Roles sized for where you actually are in school, not five-year-experience traps.</p></div><div class="opp-card"><div class="icon-dot">🏆</div><h3>Competitions & grants</h3><p>Contests and small grants your project can realistically compete for.</p></div></div></section>'''
@@ -764,26 +789,78 @@ SLIDESHOW_PHOTOS = [
 ]
 
 def hover_card(inner: str, description: str, extra_class: str = "") -> str:
-    """Wrap content with a cursor-following auto-description tooltip."""
-    return f'<div class="hover-card {extra_class}" data-tooltip="{e(description)}">{inner}</div>'
+    # Retain the structural wrapper, but no cursor-following description.
+    return f'<div class="hover-card {extra_class}">{inner}</div>'
+
+
+def slide_image_url(slide) -> str:
+    if slide['bundled_path']:
+        return f"/static/images/slides/{quote(slide['bundled_path'], safe='')}?v={APP_VERSION}"
+    return f"/slide-image?id={slide['id']}"
+
+
+def normalize_slide_photo(raw: bytes) -> bytes:
+    """Decode a bounded still photo, correct its orientation and strip private metadata.
+
+    Never trust a filename or a supplied MIME type. Stored uploads are re-encoded JPEGs;
+    source JPEG, PNG and WebP are supported. This also avoids serving active content.
+    """
+    if not raw or len(raw) > MAX_SLIDE_UPLOAD_BYTES:
+        raise ValueError('Choose a photo no larger than 8 MB.')
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(raw)) as probe:
+                if probe.format not in ('JPEG', 'PNG', 'WEBP'):
+                    raise ValueError('Choose a JPEG, PNG or WebP photo.')
+                if probe.width < 1 or probe.height < 1 or probe.width * probe.height > MAX_SLIDE_PIXELS:
+                    raise ValueError('The photo is too large in pixels; use at most 36 megapixels.')
+                if getattr(probe, 'n_frames', 1) != 1:
+                    raise ValueError('Please choose a still photo, not an animation.')
+                probe.verify()
+            with Image.open(io.BytesIO(raw)) as photo:
+                photo.load()
+                photo = ImageOps.exif_transpose(photo)
+                photo.thumbnail((1920, 1920), Image.Resampling.LANCZOS)
+                if photo.mode in ('RGBA', 'LA') or 'transparency' in photo.info:
+                    rgba = photo.convert('RGBA')
+                    clean = Image.new('RGB', rgba.size, 'white')
+                    clean.paste(rgba, mask=rgba.getchannel('A'))
+                else:
+                    clean = photo.convert('RGB')
+                output = io.BytesIO()
+                clean.save(output, 'JPEG', quality=88, optimize=True, progressive=True)
+                return output.getvalue()
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError('Choose a valid, non-animated JPEG, PNG or WebP photo.') from exc
+
 
 def render_slideshow() -> str:
-    slides = "".join([
-        f'<figure class="slide {"is-active" if i == 0 else ""}" data-index="{i}">'
-        f'<img src="/static/images/slides/{f}?v={APP_VERSION}" alt="{e(alt)}" loading="{"eager" if i == 0 else "lazy"}" decoding="async">'
-        f'<figcaption>{e(alt)}</figcaption></figure>'
-        for i, (f, alt) in enumerate(SLIDESHOW_PHOTOS)
-    ])
-    dots = "".join([f'<button class="slide-dot {"is-active" if i == 0 else ""}" data-go="{i}" aria-label="Show photo {i+1}"></button>' for i in range(len(SLIDESHOW_PHOTOS))])
+    with db() as conn:
+        photos = conn.execute('SELECT id,bundled_path,caption,position FROM slideshow_photos ORDER BY position,id').fetchall()
+    # When the owner removes every image, hide the empty section and its controls.
+    if not photos:
+        return ''
+    slides = []
+    for i, photo in enumerate(photos):
+        caption = photo['caption'].strip()
+        alt = caption or 'Slideshow photograph'
+        figcaption = f'<figcaption>{e(caption)}</figcaption>' if caption else ''
+        slides.append(f'<figure class="slide {"is-active" if i == 0 else ""}" data-index="{i}">'
+                      f'<img src="{e(slide_image_url(photo))}" alt="{e(alt)}" loading="{"eager" if i == 0 else "lazy"}" decoding="async">'
+                      f'{figcaption}</figure>')
+    dots = "".join(f'<button class="slide-dot {"is-active" if i == 0 else ""}" data-go="{i}" aria-label="Show photo {i+1}"></button>' for i in range(len(photos)))
     return f"""<section class="slideshow-section" id="gallery">
       <div class="slideshow-head"><p class="eyebrow eyebrow-dark">Learning, growing, achieving</p>
       <h2>Moments along the learning journey.</h2></div>
       <div class="slideshow" id="slideshow">
-        <div class="slides">{slides}</div>
+        <div class="slides">{''.join(slides)}</div>
         <button class="slide-nav prev" data-dir="-1" aria-label="Previous photo">‹</button>
         <button class="slide-nav next" data-dir="1" aria-label="Next photo">›</button>
         <div class="slide-dots">{dots}</div>
-        <span class="slide-counter"><strong id="slideCurrent">1</strong> / {len(SLIDESHOW_PHOTOS)}</span>
+        <span class="slide-counter"><strong id="slideCurrent">1</strong> / {len(photos)}</span>
       </div>
     </section>"""
 
@@ -798,12 +875,12 @@ def render_extra_features() -> str:
       <div class="feature-inner"><p class="eyebrow eyebrow-dark">Built for the whole journey</p>
       <h2>One account. Every step from discovery to funding.</h2>
       <div class="feature-grid">
-        <a class="feature-tile" href="/opportunities" data-tooltip="Browse verified scholarships, internships, competitions, grants and applications. Hover any listing for an instant description."><span class="feature-icon">🔎</span><h3>Opportunity finder</h3><p>Search by country, level, field and deadline. Save what fits.</p></a>
-        <a class="feature-tile" href="/courses" data-tooltip="Pre-university courses in academic English, foundation maths, programming, research methods and university applications."><span class="feature-icon">📚</span><h3>Pre-university courses</h3><p>Close the gap before you apply with short, focused courses.</p></a>
-        <a class="feature-tile" href="/exams" data-tooltip="Prepare for SAT, ACT, IELTS, TOEFL, AP/IB/A-Levels and scholarship aptitude tests with structured study plans."><span class="feature-icon">📝</span><h3>Exam preparation</h3><p>Practice plans for the tests that unlock university offers.</p></a>
-        <a class="feature-tile" href="/submit" data-tooltip="Found an opportunity? Submit it for admin review. Nothing is published until the owner approves it."><span class="feature-icon">➕</span><h3>Community submissions</h3><p>Add a scholarship or competition and help other students find it.</p></a>
-        <a class="feature-tile" href="/marketplace" data-tooltip="Submit your project for review and let supporters use the owner-managed payment link when available."><span class="feature-icon">🚀</span><h3>Project marketplace</h3><p>Show your build, find sponsors, and get funded.</p></a>
-        <a class="feature-tile" href="/signup" data-tooltip="Create a free account to unlock opportunities, courses, exam prep, submissions and the builder workspace."><span class="feature-icon">🔐</span><h3>Your private workspace</h3><p>Drafts, uploads, saved listings and messages in one place.</p></a>
+        <a class="feature-tile" href="/opportunities"><span class="feature-icon">🔎</span><h3>Opportunity finder</h3><p>Search by country, level, field and deadline. Save what fits.</p></a>
+        <a class="feature-tile" href="/courses"><span class="feature-icon">📚</span><h3>Pre-university courses</h3><p>Close the gap before you apply with short, focused courses.</p></a>
+        <a class="feature-tile" href="/exams"><span class="feature-icon">📝</span><h3>Exam preparation</h3><p>Practice plans for the tests that unlock university offers.</p></a>
+        <a class="feature-tile" href="/submit"><span class="feature-icon">➕</span><h3>Community submissions</h3><p>Add a scholarship or competition and help other students find it.</p></a>
+        <a class="feature-tile" href="/marketplace"><span class="feature-icon">🚀</span><h3>Project marketplace</h3><p>Show your build, find sponsors, and get funded.</p></a>
+        <a class="feature-tile" href="/signup"><span class="feature-icon">🔐</span><h3>Your private workspace</h3><p>Drafts, uploads, saved listings and messages in one place.</p></a>
       </div></div></section>
     <section class="trust-section"><div class="trust-inner">
       <div class="trust-stat"><strong data-count="37">0</strong><span>opportunities listed</span></div>
@@ -872,7 +949,7 @@ def render_programs(user):
             "course-wrap") for pr in FEATURED_PROGRAMS
     ])
     body = f"""<section class="page-hero compact"><p class="eyebrow">Featured programmes</p>
-      <h1>YYAS, YYGS, RSI and more.</h1><p>{len(FEATURED_PROGRAMS)} real programmes with official links, eligibility and deadlines in one place. Hover any card for the details.</p></section>
+      <h1>YYAS, YYGS, RSI and more.</h1><p>{len(FEATURED_PROGRAMS)} real programmes with official links, eligibility and deadlines in one place.</p></section>
       <section class="panel-section"><div class="course-grid">{cards}</div>
       <p class="muted">Deadlines change each year — always confirm dates and eligibility on the official page before applying.</p></section>"""
     return page_shell("Featured programs", body, user, "programs")
@@ -1003,7 +1080,7 @@ def render_opportunities(user, query):
             saved = item["id"] in bookmarks
             save_button = f"""<form method="post" action="/bookmark" class="inline-form"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><input type="hidden" name="opportunity_id" value="{item['id']}"><button class="ghost-button" type="submit">{'Saved ✓' if saved else 'Save'}</button></form>"""
         else: save_button = "<a class='ghost-button' href='/login'>Log in to save</a>"
-        cards.append(f"""<article class="listing-card" data-tooltip="{e(item['auto_description'] if 'auto_description' in item.keys() and item['auto_description'] else make_auto_description(item))}"><div class="listing-top"><span class="tag">{e(item['type'])}</span><span class="deadline">{e(deadline_badge(item['deadline']))}</span></div><h3>{e(item['title'])}</h3><p class="provider">{e(item['provider'])} · {e(item['country'])}</p><p>{e(item['summary'])}</p><dl class="mini-meta"><div><dt>Level</dt><dd>{e(item['level'])}</dd></div><div><dt>Deadline</dt><dd>{e(item['deadline'])}</dd></div></dl><p class="source">Source: {e(item['source'])}</p><div class="card-actions"><a class="cta-primary slim" target="_blank" rel="noopener" href="{e(anchor_url(item['url']))}">Apply on source ↗</a>{save_button}</div></article>""")
+        cards.append(f"""<article class="listing-card"><div class="listing-top"><span class="tag">{e(item['type'])}</span><span class="deadline">{e(deadline_badge(item['deadline']))}</span></div><h3>{e(item['title'])}</h3><p class="provider">{e(item['provider'])} · {e(item['country'])}</p><p>{e(item['summary'])}</p><dl class="mini-meta"><div><dt>Level</dt><dd>{e(item['level'])}</dd></div><div><dt>Deadline</dt><dd>{e(item['deadline'])}</dd></div></dl><p class="source">Source: {e(item['source'])}</p><div class="card-actions"><a class="cta-primary slim" target="_blank" rel="noopener" href="{e(anchor_url(item['url']))}">Apply on source ↗</a>{save_button}</div></article>""")
     def sel(x): return "selected" if typ == x else ""
     body = f"""<section class="page-hero compact"><p class="eyebrow">Opportunity finder</p><h1>Real applications, contests, internships, and grants.</h1><p>These seed listings are current starting points for August 2026. Always verify the final deadline and eligibility on the official page before applying.</p></section><section class="panel-section"><form class="filter-bar" method="get" action="/opportunities"><input name="q" value="{e(q)}" placeholder="Search Rwanda, AI, climate, internship..."><select name="type"><option value="">All types</option><option {sel('Scholarship')} value="Scholarship">Scholarships</option><option {sel('Internship')} value="Internship">Internships</option><option {sel('Competition')} value="Competition">Competitions</option><option {sel('Grant')} value="Grant">Grants</option><option {sel('Hackathon')} value="Hackathon">Hackathons</option></select><button class="cta-primary slim" type="submit">Filter</button></form><div class="listing-grid">{''.join(cards) if cards else '<p class="empty">No matches yet. Try a different search.</p>'}</div></section>"""
     return page_shell("Opportunities", body, user, "opportunities")
@@ -1191,8 +1268,11 @@ def sync_opportunities_from_feeds() -> tuple[int, str]:
                 messages.append(f"failed {source}: {ex}")
     return imported, "; ".join(messages)
 
-def render_admin(user, msg='', query=None):
+def render_admin(user, msg='', query=None, msg_kind='success'):
     query = query or {}
+    if not msg:
+        msg = {'added': 'Photo added to the homepage slideshow.',
+               'removed': 'Photo removed from the homepage slideshow.'}.get(query.get('slide_result', [''])[0], '')
     try: requested_user_page=int(query.get('users_page',['1'])[0])
     except (ValueError, TypeError): requested_user_page=1
     cutoff=(datetime.now(timezone.utc)-timedelta(days=7)).isoformat(timespec='seconds')
@@ -1219,6 +1299,7 @@ def render_admin(user, msg='', query=None):
         logs=conn.execute('SELECT * FROM sync_logs ORDER BY id DESC LIMIT 5').fetchall()
         submissions=conn.execute("SELECT s.*,u.name submitter,u.email submitter_email FROM opportunity_submissions s JOIN users u ON u.id=s.user_id WHERE s.status='pending' ORDER BY s.id DESC LIMIT 30").fetchall()
         sources=conn.execute('SELECT * FROM feed_sources ORDER BY id').fetchall()
+        slideshow_photos=conn.execute('SELECT id,bundled_path,caption,position FROM slideshow_photos ORDER BY position,id').fetchall()
         payments=conn.execute("""SELECT pl.*,p.title,py.reference FROM pledges pl JOIN projects p ON p.id=pl.project_id
             JOIN payments py ON py.id=(SELECT MAX(id) FROM payments px WHERE px.pledge_id=pl.id AND px.provider='owner_link') ORDER BY CASE WHEN pl.status='payment_pending' THEN 0 ELSE 1 END, pl.id DESC LIMIT 100""").fetchall()
         disbursements=conn.execute('SELECT d.*,p.title FROM disbursements d JOIN projects p ON p.id=d.project_id ORDER BY d.id DESC LIMIT 30').fetchall()
@@ -1226,6 +1307,12 @@ def render_admin(user, msg='', query=None):
         legacy=conn.execute("SELECT m.*,p.title FROM project_messages m JOIN projects p ON p.id=m.project_id WHERE m.status='legacy_review' ORDER BY m.id DESC LIMIT 100").fetchall()
     csrf=e(user['csrf'])
     cards=''.join(f"<div class='stat-card'><span>{e(k)}</span><strong>{v}</strong></div>" for k,v in stats.items())
+    slide_cards=''
+    for photo in slideshow_photos:
+        caption=photo['caption'].strip()
+        label=caption or 'Untitled slideshow photo'
+        source='Website photo' if photo['bundled_path'] else 'Uploaded photo'
+        slide_cards+=f"""<article class='admin-slide-card'><img src='{e(slide_image_url(photo))}' alt='{e(label)}' loading='lazy'><div class='admin-slide-info'><strong>{e(label)}</strong><span>{source}</span></div><form method='post' action='/admin/slideshow/remove' onsubmit="return confirm('Remove this photo from the homepage slideshow?');"><input type='hidden' name='csrf' value='{csrf}'><input type='hidden' name='photo_id' value='{photo['id']}'><button class='ghost-button danger' type='submit'>Remove photo</button></form></article>"""
     user_pagination = (f"<a class='ghost-button slim' href='/admin?users_page={user_page-1}#people'>← Previous</a>" if user_page>1 else '') + f" <span>Page {user_page} of {user_pages}</span> " + (f"<a class='ghost-button slim' href='/admin?users_page={user_page+1}#people'>Next →</a>" if user_page<user_pages else '')
     user_rows=''
     for u in users:
@@ -1265,10 +1352,16 @@ def render_admin(user, msg='', query=None):
     owner_link=get_setting('owner_payment_link','')
     blocked_phrases=get_setting('message_blocked_phrases','')
     body=f"""<section class='page-hero compact admin-hero'><p class='eyebrow'>Admin command center</p><h1>Manage reviews, people and funding.</h1><p>Owner-only tools for {e(OWNER_ADMIN_EMAIL)}. Personal records below are private.</p></section>
-    <section class='admin-shell'><aside class='admin-sidebar'><p class='eyebrow eyebrow-dark'>Workspace</p><h2>Admin menu</h2><nav class='admin-nav' aria-label='Admin sections'><a href='#review'>① Review queue</a><a href='#content'>② Content</a><a href='#automation'>③ Automation</a><a href='#people'>④ People</a><a href='#safety'>⑤ Message safety</a><a href='#funding'>⑥ Funding</a></nav><p class='admin-sidebar-note'>Review project text, files and opportunity links before publication.</p></aside><div class='admin-main'><div class='stats-row'>{cards}</div>{flash(msg,'success') if msg else ''}
+    <section class='admin-shell'><aside class='admin-sidebar'><p class='eyebrow eyebrow-dark'>Workspace</p><h2>Admin menu</h2><nav class='admin-nav' aria-label='Admin sections'><a href='#review'>① Review queue</a><a href='#content'>② Content</a><a href='#slideshow-settings' class='admin-nav-child'>↳ Slideshow photos</a><a href='#automation'>③ Automation</a><a href='#people'>④ People</a><a href='#safety'>⑤ Message safety</a><a href='#funding'>⑥ Funding</a></nav><p class='admin-sidebar-note'>Review project text, files and opportunity links before publication.</p></aside><div class='admin-main'><div class='stats-row'>{cards}</div>{flash(msg,msg_kind) if msg else ''}
     <h2 class='admin-group-title' id='review'>1 · Review queue</h2><div class='dash-panel wide' id='submissions'><h2>Community submissions</h2><p class='muted'>Submissions stay private until approved. Verify the original page and deadlines.</p><div class='mini-grid'>{sub_rows or '<p class="empty">No submissions waiting for review.</p>'}</div></div>
     <div class='dash-panel wide'><h2>Project moderation queue</h2><p class='muted'>Open every project, read its full text and inspect each attachment for identifying information. Automatic filters cannot inspect file contents. Reject material you cannot approve safely.</p><div class='mini-grid'>{pending_rows or '<p class="empty">No projects waiting for review.</p>'}</div></div>
-    <h2 class='admin-group-title' id='content'>2 · Content &amp; catalogue</h2><div class='dash-panel admin-form' id='add-opportunity'><h2>Add an opportunity manually</h2><form method='post' action='/admin/opportunity/add' class='builder-form'><input type='hidden' name='csrf' value='{csrf}'><div class='form-row'><label>Type<select name='type'><option>Scholarship</option><option>Internship</option><option>Competition</option><option>Grant</option><option>Hackathon</option><option>Opportunity</option></select></label><label>Deadline<input required name='deadline' placeholder='YYYY-MM-DD or See official page'></label></div><label>Title<input required name='title'></label><div class='form-row'><label>Provider<input required name='provider'></label><label>Country / region<input required name='country' value='Global'></label></div><label>Level<input required name='level' value='Students'></label><label>Application URL<input required type='url' name='url'></label><label>Summary<textarea required name='summary' rows='4'></textarea></label><label>Tags<input name='tags'></label><button class='cta-primary'>Post opportunity</button></form></div>
+    <h2 class='admin-group-title' id='content'>2 · Content &amp; catalogue</h2>
+    <div class='dash-panel wide slideshow-admin' id='slideshow-settings'><div class='slide-admin-heading'><div><p class='eyebrow eyebrow-dark'>Homepage</p><h2>Slideshow photos</h2><p class='muted'>Add a new photo or remove any existing photo below. New photos appear first.</p></div><span class='slide-admin-count'>{len(slideshow_photos)} / {MAX_SLIDES} photos</span></div>
+    {flash(msg,msg_kind) if msg and query.get('slide_result') else ''}
+    <p class='slide-admin-warning'><strong>Storage:</strong> Without a persistent disk, a Render deploy or restart can erase slideshow changes and other data. Keep backups. Only publish photos when you have permission and any required consent, especially for minors. Removing a photo cannot recall copies already shared.</p>
+    <form method='post' action='/admin/slideshow/add' enctype='multipart/form-data' class='builder-form slide-upload-form'><input type='hidden' name='csrf' value='{csrf}'><label>Choose a photo<input type='file' name='photo' accept='image/jpeg,image/png,image/webp' required><span class='form-hint'>JPEG, PNG or WebP · maximum 8 MB · metadata is removed.</span></label><label>Photo description <span class='optional'>(optional)</span><input type='text' name='caption' maxlength='160' placeholder='Describe this photo'><span class='form-hint'>Shown on the photo and used for accessibility.</span></label><button class='cta-primary slim' type='submit'>Add photo to slideshow</button></form>
+    <div class='admin-slide-grid'>{slide_cards or '<p class="empty">No slideshow photos yet. Add one above to show the slideshow.</p>'}</div></div>
+    <div class='dash-panel admin-form' id='add-opportunity'><h2>Add an opportunity manually</h2><form method='post' action='/admin/opportunity/add' class='builder-form'><input type='hidden' name='csrf' value='{csrf}'><div class='form-row'><label>Type<select name='type'><option>Scholarship</option><option>Internship</option><option>Competition</option><option>Grant</option><option>Hackathon</option><option>Opportunity</option></select></label><label>Deadline<input required name='deadline' placeholder='YYYY-MM-DD or See official page'></label></div><label>Title<input required name='title'></label><div class='form-row'><label>Provider<input required name='provider'></label><label>Country / region<input required name='country' value='Global'></label></div><label>Level<input required name='level' value='Students'></label><label>Application URL<input required type='url' name='url'></label><label>Summary<textarea required name='summary' rows='4'></textarea></label><label>Tags<input name='tags'></label><button class='cta-primary'>Post opportunity</button></form></div>
     <div class='dash-panel'><h2>Newest opportunities</h2><div class='table-wrap'><table><thead><tr><th>Type</th><th>Title</th><th>Deadline</th><th>Link</th><th>Action</th></tr></thead><tbody>{opp_rows}</tbody></table></div></div>
     <h2 class='admin-group-title' id='automation'>3 · Automation &amp; imports</h2><div class='dash-panel'><h2>Automatic opportunity posting</h2><p class='muted'>Imports from saved sources; verify deadlines. Auto-import is {'ON' if auto_on else 'OFF'}.</p><form method='post' action='/admin/auto-sync' class='table-form'><input type='hidden' name='csrf' value='{csrf}'><input type='hidden' name='enabled' value='{'0' if auto_on else '1'}'><button class='ghost-button'>Turn {'off' if auto_on else 'on'} auto-import</button></form><form method='post' action='/admin/sync' class='table-form'><input type='hidden' name='csrf' value='{csrf}'><button class='cta-primary slim'>Sync now</button></form><ul class='clean-list'>{log_rows or '<li>No syncs yet.</li>'}</ul></div>
     <div class='dash-panel'><h2>Auto-import &amp; source links</h2><form method='post' action='/admin/source/add' class='builder-form'><input type='hidden' name='csrf' value='{csrf}'><label>Add a feed or webpage link<input name='url' type='url' placeholder='https://example.com/feed' required></label><button class='cta-primary slim'>Save link</button></form><form method='post' action='/admin/source/fetch' class='builder-form'><input type='hidden' name='csrf' value='{csrf}'><label>Fetch a one-off link<input name='url' type='url' required></label><button class='ghost-button'>Fetch now</button></form><ul class='clean-list admin-source-list'>{source_rows or '<li>No saved sources.</li>'}</ul></div>
@@ -1346,9 +1439,11 @@ class ScholarHandler(BaseHTTPRequestHandler):
     def verify_csrf(self, user, form=None):
         if not user: return False
         sent = form.get("csrf", "") if form is not None else self.headers.get("X-CSRF-Token", "")
-        return secrets.compare_digest(sent, user["csrf"])
+        try: return secrets.compare_digest(sent, user["csrf"])
+        except (TypeError, ValueError): return False
     def do_HEAD(self):
-        path=urlparse(self.path).path
+        parsed=urlparse(self.path); path=parsed.path
+        if path == '/slide-image': return self.serve_slide_image(parse_qs(parsed.query), head=True)
         user=self.current_user()
         if not path.startswith('/static/') and path not in PUBLIC_GET_PATHS and not self.gate(user): return
         self.send_response(200)
@@ -1361,6 +1456,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         if path == "/sitemap.xml": return self.send_plain(self.build_sitemap(), "application/xml")
         if path == "/version": return self.send_plain(f"70Scholar {APP_VERSION} - privacy, owner review and funding", "text/plain")
         if path.startswith("/static/"): return self.serve_static(path)
+        if path == "/slide-image": return self.serve_slide_image(query)
         if path.startswith("/uploads/profiles/"):
             if not self.gate(user): return None
             return self.serve_profile_upload(path, user)
@@ -1399,7 +1495,37 @@ class ScholarHandler(BaseHTTPRequestHandler):
     def serve_static(self, path):
         target=(STATIC_DIR / path.removeprefix("/static/")).resolve()
         if STATIC_DIR.resolve() not in target.parents or not target.is_file(): self.send_response(404); self.end_headers(); return
-        data=target.read_bytes(); self.send_response(200); self.send_header("Content-Type", mimetypes.guess_type(str(target))[0] or "application/octet-stream"); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+        is_bundled_slide = target.parent == (STATIC_DIR / 'images' / 'slides').resolve()
+        if is_bundled_slide:
+            # Hiding a bundled photo also disables its old direct site URL. Its file
+            # can still exist in the source repository, backups or prior copies.
+            with db() as conn:
+                visible=conn.execute('SELECT 1 FROM slideshow_photos WHERE bundled_path=?',(target.name,)).fetchone()
+            if not visible: self.send_response(404); self.end_headers(); return
+        data=target.read_bytes(); self.send_response(200)
+        self.send_header("Content-Type", mimetypes.guess_type(str(target))[0] or "application/octet-stream")
+        self.send_header("Content-Length", str(len(data)))
+        if is_bundled_slide: self.send_header('Cache-Control','no-store')
+        self.end_headers(); self.wfile.write(data)
+    def serve_slide_image(self, query, head=False):
+        raw_id=query.get('id',[''])[0]
+        if not raw_id.isdigit() or len(raw_id)>18:
+            self.send_response(404); self.end_headers(); return
+        with db() as conn:
+            row=conn.execute("SELECT data FROM slideshow_photos WHERE id=? AND bundled_path=''",(int(raw_id),)).fetchone()
+        if not row or row['data'] is None:
+            self.send_response(404); self.end_headers(); return
+        data=row['data']
+        self.send_response(200)
+        self.send_header('Content-Type','image/jpeg')
+        self.send_header('Content-Length',str(len(data)))
+        self.send_header('X-Content-Type-Options','nosniff')
+        self.send_header('Content-Security-Policy',"default-src 'none'; sandbox")
+        # Removal should make the URL unavailable instead of leaving a long-lived browser cache.
+        self.send_header('Cache-Control','no-store')
+        self.end_headers()
+        if not head: self.wfile.write(data)
+
     def serve_profile_upload(self, path, user):
         rel = path.removeprefix('/uploads/profiles/')
         match = re.fullmatch(r'user-(\d+)-[a-f0-9]+\.(?:jpg|jpeg|png|gif|webp)', rel, re.I)
@@ -1519,6 +1645,14 @@ class ScholarHandler(BaseHTTPRequestHandler):
             if not user: return self.redirect("/login")
             if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "<section class='panel-section'>CSRF check failed.</section>", user), 403)
             return self.handle_project_save(user, form)
+        if path == "/admin/slideshow/add":
+            if not is_admin(user): return self.send_html(page_shell("Forbidden", "<section class='panel-section'>Owner admin only.</section>", user), 403)
+            return self.handle_admin_slide_add(user)
+        if path == "/admin/slideshow/remove":
+            if not is_admin(user): return self.send_html(page_shell("Forbidden", "<section class='panel-section'>Owner admin only.</section>", user), 403)
+            form=self.read_form()
+            if not self.verify_csrf(user,form): return self.send_html(page_shell("Security check failed", "<section class='panel-section'>CSRF check failed.</section>", user),403)
+            return self.handle_admin_slide_remove(user,form)
         if path == "/admin/opportunity/add":
             form=self.read_form();
             if not user: return self.redirect("/login")
@@ -1838,6 +1972,70 @@ class ScholarHandler(BaseHTTPRequestHandler):
         if reason:
             return self.send_html(render_notice('Message removed', 'The message was removed for owner review.' if is_admin(user) else 'The message was removed and the account is blocked for owner review. Contact the helpline to appeal.'),403)
         return self.redirect(f'/payment/start?pledge_id={pledge_id}')
+
+    def handle_admin_slide_add(self, user):
+        # Check authorization before reading the body and cap it before buffering.
+        try:
+            length=int(self.headers.get('Content-Length','0'))
+        except ValueError:
+            length=0
+        if length <= 0 or length > MAX_SLIDE_REQUEST_BYTES:
+            return self.send_html(render_admin(user,'Choose a photo no larger than 8 MB.',msg_kind='error'),413)
+        content_type=self.headers.get('Content-Type','')
+        if len(content_type)>512 or not content_type.lower().startswith('multipart/form-data;'):
+            return self.send_html(render_admin(user,'Choose a photo using the upload form.',msg_kind='error'),400)
+        try:
+            prefix=('Content-Type: '+content_type+'\r\nMIME-Version: 1.0\r\n\r\n').encode('ascii')
+            message=BytesParser(policy=policy.default).parsebytes(prefix+self.rfile.read(length))
+            if not message.is_multipart(): raise ValueError('Missing form fields')
+            fields={}; photo_data=None
+            parts=list(message.iter_parts())
+            if len(parts)>3: raise ValueError('Too many fields')
+            for part in parts:
+                if part.get_content_disposition() != 'form-data': raise ValueError('Invalid field')
+                name=part.get_param('name',header='content-disposition')
+                payload=part.get_payload(decode=True)
+                if not isinstance(payload,bytes): raise ValueError('Invalid content')
+                if name == 'photo' and photo_data is None and part.get_filename():
+                    photo_data=payload
+                elif name in ('csrf','caption') and name not in fields and len(payload)<=1024:
+                    fields[name]=payload.decode('utf-8')
+                else:
+                    raise ValueError('Invalid or duplicate field')
+            if photo_data is None: raise ValueError('Missing photo')
+        except Exception:
+            return self.send_html(render_admin(user,'Could not read the upload. Choose a JPEG, PNG or WebP photo.',msg_kind='error'),400)
+        if not self.verify_csrf(user,fields):
+            return self.send_html(page_shell('Security check failed',"<section class='panel-section'>CSRF check failed.</section>",user),403)
+        caption=fields.get('caption','').strip()
+        if len(caption)>160:
+            return self.send_html(render_admin(user,'Photo descriptions must be 160 characters or fewer.',msg_kind='error'),400)
+        try:
+            cleaned=normalize_slide_photo(photo_data)
+        except ValueError as exc:
+            return self.send_html(render_admin(user,str(exc),msg_kind='error'),400)
+        problem=''
+        with db() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            counts=conn.execute('SELECT COUNT(*) n, COALESCE(SUM(length(data)),0) used, COALESCE(MIN(position),0) first FROM slideshow_photos').fetchone()
+            if counts['n'] >= MAX_SLIDES:
+                problem=f'The slideshow is limited to {MAX_SLIDES} photos. Remove one first.'
+            elif counts['used']+len(cleaned) > MAX_SLIDE_STORAGE_BYTES:
+                problem='Slideshow storage is full. Remove photos before adding another.'
+            else:
+                conn.execute("INSERT INTO slideshow_photos(bundled_path,data,caption,position,created_at) VALUES('',?,?,?,?)",
+                             (cleaned,caption,counts['first']-1,now_iso()))
+        if problem: return self.send_html(render_admin(user,problem,msg_kind='error'),400)
+        return self.redirect('/admin?slide_result=added#slideshow-settings')
+
+    def handle_admin_slide_remove(self, user, form):
+        photo_id=form.get('photo_id','')
+        if not photo_id.isdigit() or len(photo_id)>18:
+            return self.send_html(render_admin(user,'Invalid photo.',msg_kind='error'),400)
+        with db() as conn:
+            removed=conn.execute('DELETE FROM slideshow_photos WHERE id=?',(int(photo_id),)).rowcount
+        if not removed: return self.send_html(render_admin(user,'Photo not found.',msg_kind='error'),404)
+        return self.redirect('/admin?slide_result=removed#slideshow-settings')
 
     def handle_admin_add_opportunity(self, user, form):
         fields = {k: form.get(k, "").strip() for k in ["type","title","provider","country","level","deadline","url","summary","tags"]}

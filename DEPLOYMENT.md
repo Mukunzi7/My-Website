@@ -1,7 +1,7 @@
 # 70Scholar deployment
 
 The current Render hostname is <https://seven0scholar-7cjc.onrender.com>; see
-`RENDER_DEPLOY.md` for the authoritative setup, backup and v18 migration checklist.
+`RENDER_DEPLOY.md` for the authoritative setup, backup and migration checklist.
 
 ## Essential warnings
 
@@ -18,6 +18,6 @@ The current Render hostname is <https://seven0scholar-7cjc.onrender.com>; see
   personal information, and previously uploaded external copies may require separate cleanup.
 
 Start command: `python3 server.py`. Bind `HOST=0.0.0.0`; the hosting platform supplies
-`PORT`. Health check: `/version`. The app uses only Python's standard library and SQLite.
+`PORT`. Health check: `/version`. The app uses SQLite and Pillow for safe slideshow photo processing; install `requirements.txt`.
 For other hosts, provide equivalent durable storage, backups, HTTPS, network filtering and
 secret management.

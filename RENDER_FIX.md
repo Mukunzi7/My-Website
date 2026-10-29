@@ -59,7 +59,7 @@ Usually you do not need to set `PORT` manually because Render provides it. If as
 2. **Push the `static/` folder.** `/static/styles.css` and `/static/app.js` must return 200;
    otherwise the site loads unstyled.
 3. **Check `/version` after deploy.** It must say
-   `70Scholar v18-privacy-r1 ...`.
+   `70Scholar v19-hero-slideshow ...`.
 
 ## After updating GitHub
 

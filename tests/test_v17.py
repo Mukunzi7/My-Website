@@ -127,7 +127,7 @@ class ScholarTests(unittest.TestCase):
             self.assertIn(server.e(pr['title']),page)
             self.assertNotIn(pr['url'],home)
         self.assertEqual(server.FEATURED_PROGRAMS[1]['deadline'],'2027-01-06')
-        status,version,_=anon.get('/version');self.assertEqual(status,200);self.assertIn('v18-privacy',version)
+        status,version,_=anon.get('/version');self.assertEqual(status,200);self.assertIn(server.APP_VERSION,version)
 
     def test_signup_needs_phone_and_admin_grant_is_not_email_verification(self):
         anon=Client(self.base)

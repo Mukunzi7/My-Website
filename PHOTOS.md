@@ -4,6 +4,25 @@ The old seven-photo static homepage gallery was removed; the slideshow remains. 
 itself does not display source or credit lines below the images. Keep this file as an
 operational provenance record (the repository may itself be public).
 
+## Owner-supplied homepage hero photo
+
+`static/images/hero-school-group.jpg` was provided directly by the site owner for the
+homepage hero. It has been re-encoded without source metadata and is not cropped. Its
+presence in the repository does not establish publication rights or consent. The owner
+should obtain appropriate permission and any required consent for identifiable people,
+especially children, before public use.
+
+## Owner-managed slideshow
+
+Admin → Slideshow photos supports JPEG, PNG and WebP up to 8 MB, at most 36 megapixels.
+Photos are normalized to JPEG, resized to fit within 1920 pixels per side and stripped of
+metadata. New photos appear first; an optional description is displayed and used as alt
+text. The owner may remove bundled or uploaded images. Removing a bundled image hides its
+direct website URL but does not erase the copy in the public source repository, caches,
+backups or elsewhere. SQLite stores uploaded image data and the selection, so include the
+database in backups. Without persistent storage, deploys or restarts can erase changes.
+Do not publish an image without the required permissions.
+
 ## New slideshow photos
 
 All of the following were downloaded from Pexels and are photographs, not generated images.

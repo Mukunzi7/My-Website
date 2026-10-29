@@ -7,6 +7,7 @@ Repository: **<https://github.com/Mukunzi7/My-Website>** (public, branch `main`)
 ```bash
 git clone https://github.com/Mukunzi7/My-Website.git
 cd My-Website
+python3 -m pip install -r requirements.txt
 python3 server.py          # http://127.0.0.1:8080
 ```
 

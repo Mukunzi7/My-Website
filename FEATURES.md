@@ -1,7 +1,11 @@
-# 70Scholar v18 feature guide
+# 70Scholar v19 feature guide
 
 ## Discovery and homepage
 
+- The opening hero includes the owner-supplied group photo while retaining the headline.
+  The owner can add or remove any slideshow photo under **Admin → Slideshow photos**.
+  New images appear first; the empty slideshow is hidden. The old cursor-following
+  descriptions are removed.
 - The long-scroll homepage retains the rotating slideshow but removes the seven-photo static
   gallery and the old headline. Program details and official links are accessible only after
   an authorized sign-in. The public teaser does not expose them.
@@ -49,6 +53,10 @@ transfer already made outside the website. There is no automated collection, pro
 settlement, escrow, fee split, or disbursement. See `PAYMENTS.md`.
 
 ## Upgrade and persistence
+
+The v19 slideshow migration seeds the former bundled photos once and retains owner removals
+across normal restarts as long as the SQLite database persists. Uploaded photos are stored
+in that database and are resized and stripped of metadata.
 
 On first v18 startup, v17 public projects return to review, legacy messages are withheld,
 legacy `paid_demo` entries become unverified, and unproven email verification is cleared.
