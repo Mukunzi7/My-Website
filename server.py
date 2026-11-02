@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64, hashlib, html, io, json, ipaddress, math, mimetypes, os, re, secrets, socket, sqlite3, ssl, sys, smtplib, threading, time, urllib.request, warnings, http.client, xml.etree.ElementTree as ET
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -19,6 +20,7 @@ from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse, urlencode, urljoin
 
 import pg_compat
+import private_storage
 
 DB_INTEGRITY_ERRORS = (sqlite3.IntegrityError,) + ((pg_compat.psycopg.IntegrityError,) if pg_compat.psycopg else ())
 DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
@@ -31,7 +33,12 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 APP_NAME = "70Scholar"
-APP_VERSION = "v22-bootcamps"
+APP_VERSION = "v22-bootcamps-verse"
+# A small, static collection avoids third-party requests on every page view.
+# Text is the public-domain World English Bible Protestant edition, as published
+# by eBible.org; each passage retains a link to the original chapter and verse.
+DAILY_VERSES = tuple(json.loads((ROOT / 'data' / 'bible_daily_verses.json').read_text(encoding='utf-8'))['verses'])
+RWANDA_TIME = ZoneInfo('Africa/Kigali')
 COMPANY_NAME = "Nexus Company Ltd"
 APP_TAGLINE = "Find the opportunity. Show the build. Start the conversation."
 OWNER_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "honoremukunzi6@gmail.com").strip().lower()
@@ -39,8 +46,15 @@ ADMIN_EMAIL_ALLOWLIST = ("honoremukunzi6@gmail.com",)
 if OWNER_ADMIN_EMAIL not in ADMIN_EMAIL_ALLOWLIST:
     OWNER_ADMIN_EMAIL = ADMIN_EMAIL_ALLOWLIST[0]
 SESSION_COOKIE = "edubridge_session"
-MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", "0"))  # 0 means no 70Scholar app limit for project/media uploads
-# Separate limits for public slideshow pictures; these do not change project uploads.
+# JSON uploads are base64-buffered; bound file sizes and concurrency before reading.
+# A fixed 10 MiB limit is below Supabase Free's 50 MB per-file cap and protects
+# the small Render instance. Slideshow photos have their own lower bound.
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_PROFILE_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_UPLOAD_REQUEST_BYTES = 4 * ((MAX_UPLOAD_BYTES + 2) // 3) + 16 * 1024
+UPLOAD_SLOTS = threading.BoundedSemaphore(2)
+CLOUD_STORAGE = None  # Set only after server-side credentials and a private bucket are verified.
+# Separate limits for public slideshow pictures.
 MAX_SLIDE_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_SLIDE_REQUEST_BYTES = MAX_SLIDE_UPLOAD_BYTES + 256 * 1024
 MAX_SLIDE_PIXELS = 36_000_000
@@ -162,6 +176,111 @@ def db():
         raise
     finally:
         conn.close()
+
+
+def configure_cloud_storage():
+    """Fail closed when a Render PostgreSQL deployment lacks private object storage."""
+    url = os.environ.get('SUPABASE_URL', '').strip()
+    secret = os.environ.get('SUPABASE_SECRET_KEY', '').strip()
+    bucket = os.environ.get('SUPABASE_STORAGE_BUCKET', '').strip()
+    if not any((url, secret, bucket)):
+        if os.environ.get('RENDER', '').lower() == 'true' and DATABASE_URL:
+            raise RuntimeError('A private Supabase Storage bucket must be configured before deployment.')
+        return None
+    if not all((url, secret, bucket)):
+        raise RuntimeError('The private Supabase Storage configuration is incomplete.')
+    client = private_storage.PrivateBucket(url, secret, bucket)
+    client.verify_private()
+    return client
+
+
+def queue_storage_cleanup(conn, key: str, delay_minutes: int = 0):
+    when = (datetime.now(timezone.utc) + timedelta(minutes=delay_minutes)).isoformat(timespec='seconds')
+    conn.execute('INSERT INTO storage_cleanup_queue(object_key,not_before) VALUES(?,?) '
+                 'ON CONFLICT(object_key) DO UPDATE SET not_before=excluded.not_before', (key, when))
+
+
+def reserve_and_upload(key: str, content: bytes, mime: str):
+    """Reserve a cleanup record before upload; a crash cannot lose its tracking row."""
+    if CLOUD_STORAGE is None:
+        return False
+    CLOUD_STORAGE.verify_private()  # refuses new uploads if the bucket was made public
+    with db() as conn:
+        queue_storage_cleanup(conn, key, delay_minutes=15)
+    CLOUD_STORAGE.put(key, content, mime)
+    return True
+
+
+def link_cloud_object(conn, kind: str, record_key: str, key: str, size: int):
+    conn.execute('INSERT INTO cloud_object_links(kind,record_key,object_key,object_size) VALUES(?,?,?,?)',
+                 (kind, record_key, key, size))
+    # Link and reservation deletion commit together: if the transaction fails,
+    # the queued object is eventually deleted instead of silently orphaned.
+    conn.execute('DELETE FROM storage_cleanup_queue WHERE object_key=?', (key,))
+
+
+def retire_cloud_link(conn, kind: str, record_key: str):
+    row = conn.execute('SELECT object_key FROM cloud_object_links WHERE kind=? AND record_key=?',
+                       (kind, record_key)).fetchone()
+    if row:
+        queue_storage_cleanup(conn, row['object_key'])
+        conn.execute('DELETE FROM cloud_object_links WHERE kind=? AND record_key=?', (kind, record_key))
+
+
+def retire_cloud_media(conn, where_clause: str, params):
+    # Call only with one of the fixed, internal WHERE clauses below.
+    if where_clause not in ('owner_id=?', 'project_id=?', 'owner_id=? AND project_id IS NULL AND storage_key<>?'):
+        raise ValueError('Invalid media cleanup scope')
+    for row in conn.execute('SELECT storage_key FROM media_objects WHERE ' + where_clause, params).fetchall():
+        retire_cloud_link(conn, 'media', row['storage_key'])
+
+
+def read_cloud_or_database(kind: str, record_key: str, database_data, limit: int) -> bytes:
+    with db() as conn:
+        link = conn.execute('SELECT object_key,object_size FROM cloud_object_links WHERE kind=? AND record_key=?',
+                            (kind, record_key)).fetchone()
+    if not link:
+        return bytes(database_data)
+    if CLOUD_STORAGE is None or not 0 < link['object_size'] <= limit:
+        raise private_storage.StorageError('Private storage is unavailable.')
+    data = CLOUD_STORAGE.get(link['object_key'], limit)
+    if len(data) != link['object_size']:
+        raise private_storage.StorageError('Private storage object has an unexpected size.')
+    return data
+
+
+def process_storage_cleanup():
+    """Retry one queued deletion; lock against concurrent pointer finalization."""
+    if CLOUD_STORAGE is None:
+        return
+    with db() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        row = conn.execute('SELECT object_key FROM storage_cleanup_queue WHERE not_before<=? ORDER BY not_before LIMIT 1',
+                           (now_iso(),)).fetchone()
+        if not row:
+            return
+        key = row['object_key']
+        if conn.execute('SELECT 1 FROM cloud_object_links WHERE object_key=?', (key,)).fetchone():
+            conn.execute('DELETE FROM storage_cleanup_queue WHERE object_key=?', (key,))
+            return
+        try:
+            CLOUD_STORAGE.delete(key)
+        except private_storage.StorageError:
+            # Retain and defer this item so one failing deletion cannot starve
+            # other queued removals. Do not log object keys or filenames.
+            queue_storage_cleanup(conn, key, delay_minutes=5)
+            print('Private storage cleanup will be retried.', file=sys.stderr)
+            return
+        conn.execute('DELETE FROM storage_cleanup_queue WHERE object_key=?', (key,))
+
+
+def storage_cleanup_worker():
+    while True:
+        try:
+            process_storage_cleanup()
+        except Exception:
+            print('Private storage cleanup unavailable; will retry.', file=sys.stderr)
+        time.sleep(30)
 
 OPPORTUNITY_SEEDS = [
  {"type":"Scholarship","title":"University of Rwanda Mastercard Foundation Scholars Program 2026/2027","provider":"University of Rwanda + Mastercard Foundation","country":"Rwanda / Africa","level":"Master's students, African citizens","deadline":"2026-08-22","url":"https://www.opportunitiesforafricans.com/university-of-rwanda-mastercard-foundation-scholars-program-2026-2027-for-young-africans/","summary":"Fully funded master's scholarships at the University of Rwanda, with tuition, mentoring, leadership development, and internships. Verify final eligibility on the official portal before applying.","tags":"rwanda,mastercard,graduate,fully-funded,stem,leadership","source":"Opportunities for Africans, published 2026-07-29"},
@@ -309,6 +428,8 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS opportunity_submissions(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,type TEXT NOT NULL,title TEXT NOT NULL,provider TEXT NOT NULL,country TEXT NOT NULL,level TEXT NOT NULL,deadline TEXT NOT NULL,url TEXT NOT NULL,summary TEXT NOT NULL,tags TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,reviewed_at TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS course_enrolments(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,course_key TEXT NOT NULL,kind TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(user_id,course_key,kind));
         CREATE TABLE IF NOT EXISTS media_objects(storage_key TEXT PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,mime TEXT NOT NULL,data BLOB NOT NULL,created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS cloud_object_links(kind TEXT NOT NULL,record_key TEXT NOT NULL,object_key TEXT NOT NULL UNIQUE,object_size INTEGER NOT NULL,PRIMARY KEY(kind,record_key));
+        CREATE TABLE IF NOT EXISTS storage_cleanup_queue(object_key TEXT PRIMARY KEY,not_before TEXT NOT NULL);
         CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique ON users(lower(email));''')
         # Lightweight migrations for older local SQLite files.
         for col, ddl in {
@@ -783,6 +904,37 @@ def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: s
     <p class="copyright">© {datetime.now(timezone.utc).year} {COMPANY_NAME}. All rights reserved.</p></footer><script src="/static/app.js?v={APP_VERSION}"></script></body></html>"""
 
 
+def daily_verse(at: datetime | None = None):
+    """Return the same passage to everyone for each calendar day in Rwanda.
+
+    The ordinal, rather than day-of-month, advances across month/year boundaries
+    and leap days. An explicit datetime must have a timezone for reliable tests.
+    """
+    instant = at or datetime.now(timezone.utc)
+    if instant.tzinfo is None or instant.utcoffset() is None:
+        raise ValueError('A timezone-aware datetime is required')
+    day = instant.astimezone(RWANDA_TIME).date()
+    return DAILY_VERSES[day.toordinal() % len(DAILY_VERSES)], day
+
+
+def render_daily_verse(at: datetime | None = None) -> str:
+    verse, day = daily_verse(at)
+    date_label = f"{day.strftime('%B')} {day.day}, {day.year}"
+    return f'''<section class="verse-section" aria-labelledby="daily-verse-title">
+      <div class="verse-inner">
+        <div class="verse-intro"><p class="eyebrow eyebrow-dark">A moment of inspiration</p>
+          <h2 id="daily-verse-title">Verse of the day.</h2>
+          <p class="verse-date"><time datetime="{day.isoformat()}">{e(date_label)}</time> · Rwanda time</p>
+        </div>
+        <figure class="verse-card">
+          <span class="verse-mark" aria-hidden="true">“</span>
+          <blockquote><p>{e(verse['text'])}</p></blockquote>
+          <figcaption><a href="{e(verse['source'])}" target="_blank" rel="noopener noreferrer" aria-label="Read {e(verse['reference'])} in the World English Bible">{e(verse['reference'])} <span aria-hidden="true">↗</span></a>
+            <span class="verse-translation">World English Bible</span></figcaption>
+        </figure>
+      </div>
+    </section>'''
+
 
 def render_home(user):
     with db() as conn:
@@ -803,7 +955,7 @@ def render_home(user):
       <p>Sign in to browse summer bootcamps and featured programmes, check their requirements and follow their official links.</p>
       <a class="cta-primary" href="/programs">Explore featured programs <span class="arrow">→</span></a>
       </div></section>"""
-    body = (hero_section + render_typewriter() + journey_section + opportunities_section
+    body = (hero_section + render_daily_verse() + render_typewriter() + journey_section + opportunities_section
             + programs_section + gap_section + render_slideshow()
             + workspace_section + story_section + render_extra_features(stats["opportunities"]) + final_cta_section)
     return page_shell("Future waiting to be found", body, user)
@@ -820,7 +972,8 @@ SLIDESHOW_PHOTOS = [
     ("slide-04.jpg", "Students collaborating around a table"),
     ("slide-05.jpg", "School leaders and partners"),
     ("slide-06.jpg", "A classroom of students in uniform"),
-    ("slide-07.jpg", "A teacher teaching at the chalkboard"),
+    # slide-07 was removed by the owner from the live slideshow. The 2026-11-02
+    # public snapshot confirms this selection; recheck before a fresh cutover.
     ("slide-08.jpg", "Education stakeholders at a national dialogue"),
     ("slide-09.jpg", "Delegates at an education conference"),
     ("slide-10.jpg", "A ministerial address on education policy"),
@@ -1047,8 +1200,8 @@ def render_auth(mode: str, msg: str = "", next_url: str = ""):
     if is_signup:
         type_opts = "".join(f"<option value='{t}'>{t}</option>" for t in ACCOUNT_TYPES)
         extra = f"""<label>Full name <span class='req'>*</span><input required name="name" autocomplete="name" placeholder="Your name"></label>
-        <label>Phone number <span class='req'>*</span><input required name="phone" type="tel" autocomplete="tel" maxlength="32" placeholder="e.g. +250 7xx xxx xxx"></label>
-        <p class='form-hint'>Your name, email and phone are private to you and the owner admin. A password is required. The remaining fields are optional.</p>
+        <label>Phone number <span class='optional'>(optional)</span><input name="phone" type="tel" autocomplete="tel" maxlength="32" placeholder="e.g. +250 7xx xxx xxx"></label>
+        <p class='form-hint'>Your registration contact details are private to you and the owner admin. Only your name, email and password are required.</p>
         <label>I am a... <span class='optional'>(optional)</span><select name="account_type"><option value=''>Prefer not to say</option>{type_opts}</select></label>
         <label>Career / field of interest <span class='optional'>(optional)</span><input name="career" maxlength="120" placeholder="e.g. Medicine, Engineering, Law, Arts"></label>
         <label>Education level <span class='optional'>(optional)</span><input name="education_level" maxlength="80" placeholder="e.g. Senior 5, A-Level, undergraduate"></label>"""
@@ -1168,7 +1321,7 @@ def render_workspace(user, query):
     query_base = f"edit={project['id']}&amp;" if project else ''
     if project:
         asset_items = ''.join(f"<li><a href='/download?id={a['id']}'>{e(a['filename'])}</a><span>{a['size']//1024+1} KB</span></li>" for a in assets)
-        asset_box = f"""<div class='upload-box' data-project-id='{project['id']}' data-csrf='{e(user['csrf'])}'><h3>Upload project files</h3><p>Do not include names, contact details or other private information in filenames, images, videos or documents. The owner must manually inspect every file. Uploading to a published project sends it back for review.</p><input type='file' id='assetFile' accept='image/*,video/*,.zip,.pdf,.apk,.py,.js,.html,.css'><button class='ghost-button' type='button' id='uploadAsset'>Upload file</button><p class='upload-status' id='uploadStatus'></p><ul class='clean-list asset-list'>{asset_items or '<li>No uploaded files yet.</li>'}</ul></div>"""
+        asset_box = f"""<div class='upload-box' data-project-id='{project['id']}' data-csrf='{e(user['csrf'])}' data-max-upload='{MAX_UPLOAD_BYTES}'><h3>Upload project files</h3><p>Each file may be up to 10 MB. Do not include names, contact details or other private information in filenames, images, videos or documents. The owner must manually inspect every file. Uploading to a published project sends it back for review.</p><input type='file' id='assetFile' accept='image/*,video/*,.zip,.pdf,.apk,.py,.js,.html,.css'><button class='ghost-button' type='button' id='uploadAsset'>Upload file</button><p class='upload-status' id='uploadStatus'></p><ul class='clean-list asset-list'>{asset_items or '<li>No uploaded files yet.</li>'}</ul></div>"""
     else:
         asset_box = "<div class='upload-box'><h3>Attach files after saving</h3><p>Save your project first, then reopen it to upload a prototype, image, video or document.</p></div>"
     mode_label = 'Guided steps' if mode == 'guided' else 'Full form'
@@ -1399,7 +1552,7 @@ def render_admin(user, msg='', query=None, msg_kind='success'):
     auto_on=get_setting('auto_sync','0')=='1'
     owner_link=get_setting('owner_payment_link','')
     blocked_phrases=get_setting('message_blocked_phrases','')
-    storage_note = ('Photos and account data use the configured database. Keep independent backups; free storage has size and inactivity limits.' if DATABASE_URL else 'Without a persistent disk, a Render deploy or restart can erase slideshow changes and other data. Keep backups.')
+    storage_note = ('Accounts use the database and new uploads use a private storage bucket. Keep independent backups; free plans have size and inactivity limits.' if CLOUD_STORAGE else ('Photos and account data use the configured database. Keep independent backups; free storage has size and inactivity limits.' if DATABASE_URL else 'Without a persistent disk, a Render deploy or restart can erase slideshow changes and other data. Keep backups.'))
     body=f"""<section class='page-hero compact admin-hero'><p class='eyebrow'>Admin command center</p><h1>Manage reviews, people and funding.</h1><p>Owner-only tools for {e(OWNER_ADMIN_EMAIL)}. Personal records below are private.</p></section>
     <section class='admin-shell'><aside class='admin-sidebar'><p class='eyebrow eyebrow-dark'>Workspace</p><h2>Admin menu</h2><nav class='admin-nav' aria-label='Admin sections'><a href='#review'>① Review queue</a><a href='#content'>② Content</a><a href='#slideshow-settings' class='admin-nav-child'>↳ Slideshow photos</a><a href='#automation'>③ Automation</a><a href='#people'>④ People</a><a href='#safety'>⑤ Message safety</a><a href='#funding'>⑥ Funding</a></nav><p class='admin-sidebar-note'>Review project text, files and opportunity links before publication.</p></aside><div class='admin-main'><div class='stats-row'>{cards}</div>{flash(msg,msg_kind) if msg else ''}
     <h2 class='admin-group-title' id='review'>1 · Review queue</h2><div class='dash-panel wide' id='submissions'><h2>Community submissions</h2><p class='muted'>Submissions stay private until approved. Verify the original page and deadlines.</p><div class='mini-grid'>{sub_rows or '<p class="empty">No submissions waiting for review.</p>'}</div></div>
@@ -1469,6 +1622,29 @@ class ScholarHandler(BaseHTTPRequestHandler):
         self.end_headers()
     def read_body(self):
         return self.rfile.read(int(self.headers.get("Content-Length","0") or 0))
+    def valid_upload_length(self):
+        lengths = self.headers.get_all('Content-Length', [])
+        if (len(lengths) != 1 or not re.fullmatch(r'[0-9]{1,12}', lengths[0])
+                or self.headers.get('Transfer-Encoding')):
+            self.close_connection = True
+            self.send_json({'ok':False,'error':'A valid upload length is required.'},411)
+            return False
+        length = int(lengths[0])
+        if length <= 0 or length > MAX_UPLOAD_REQUEST_BYTES:
+            self.close_connection = True
+            self.send_json({'ok':False,'error':'File is too large. The maximum is 10 MB.'},413)
+            return False
+        return True
+    def run_bounded_upload(self, handler, user, api=True):
+        slots = UPLOAD_SLOTS
+        if not slots.acquire(blocking=False):
+            self.close_connection = True
+            if api: return self.send_json({'ok':False,'error':'Uploads are busy; please try again shortly.'},503)
+            return self.send_html(render_notice('Uploads busy','Please try again shortly.',user),503)
+        try:
+            return handler(user)
+        finally:
+            slots.release()
     def read_form(self):
         return {k:v[0] for k,v in parse_qs(self.read_body().decode(errors="replace"), keep_blank_values=True).items()}
     def require_user(self):
@@ -1569,7 +1745,10 @@ class ScholarHandler(BaseHTTPRequestHandler):
             row=conn.execute("SELECT data FROM slideshow_photos WHERE id=? AND bundled_path=''",(int(raw_id),)).fetchone()
         if not row or row['data'] is None:
             self.send_response(404); self.end_headers(); return
-        data=row['data']
+        try:
+            data=read_cloud_or_database('slide', raw_id, row['data'], MAX_SLIDE_UPLOAD_BYTES)
+        except private_storage.StorageError:
+            self.send_response(503); self.end_headers(); return
         self.send_response(200)
         self.send_header('Content-Type','image/jpeg')
         self.send_header('Content-Length',str(len(data)))
@@ -1589,7 +1768,11 @@ class ScholarHandler(BaseHTTPRequestHandler):
             photo=conn.execute('SELECT data,mime FROM media_objects WHERE storage_key=? AND owner_id=? AND project_id IS NULL',
                                ('profiles/'+rel,int(match.group(1)))).fetchone()
         if photo:
-            data=bytes(photo['data']); ctype=photo['mime']
+            try:
+                data=read_cloud_or_database('media', 'profiles/'+rel, photo['data'], MAX_PROFILE_UPLOAD_BYTES)
+            except private_storage.StorageError:
+                self.send_response(503); self.end_headers(); return
+            ctype=photo['mime']
         else:
             # Read-only fallback for pre-migration files, if the operator has moved them.
             base = (UPLOAD_DIR / 'profiles').resolve(); target=(base / rel).resolve()
@@ -1614,7 +1797,10 @@ class ScholarHandler(BaseHTTPRequestHandler):
                 media=conn.execute('SELECT data FROM media_objects WHERE storage_key=? AND owner_id=? AND project_id=?',
                     (stored[3:],asset['owner_id'],asset['project_id'])).fetchone()
             if not media: self.send_response(404); self.end_headers(); return
-            data=bytes(media['data'])
+            try:
+                data=read_cloud_or_database('media', stored[3:], media['data'], MAX_UPLOAD_BYTES)
+            except private_storage.StorageError:
+                self.send_response(503); self.end_headers(); return
         else:
             root=UPLOAD_DIR.resolve(); path=Path(stored).resolve()
             if root not in path.parents or not path.is_file():
@@ -1690,7 +1876,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
             if not user: return self.redirect("/login")
             if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "<section class='panel-section'>CSRF check failed.</section>", user), 403)
             return self.handle_account_password(user, form)
-        if path == "/api/profile-photo": return self.handle_profile_photo(user)
+        if path == "/api/profile-photo": return self.run_bounded_upload(self.handle_profile_photo, user)
         if path == "/logout":
             form=self.read_form()
             if user and self.verify_csrf(user, form):
@@ -1715,7 +1901,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
             return self.handle_project_save(user, form)
         if path == "/admin/slideshow/add":
             if not is_admin(user): return self.send_html(page_shell("Forbidden", "<section class='panel-section'>Owner admin only.</section>", user), 403)
-            return self.handle_admin_slide_add(user)
+            return self.run_bounded_upload(self.handle_admin_slide_add, user, api=False)
         if path == "/admin/slideshow/remove":
             if not is_admin(user): return self.send_html(page_shell("Forbidden", "<section class='panel-section'>Owner admin only.</section>", user), 403)
             form=self.read_form()
@@ -1825,7 +2011,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
             }[path](user,form)
         if path == "/project/message": return self.handle_project_message(user, self.read_form())
         if path == "/pledge": return self.handle_pledge(user, self.read_form())
-        if path == "/api/upload": return self.handle_upload(user)
+        if path == "/api/upload": return self.run_bounded_upload(self.handle_upload, user)
         return self.send_html(page_shell("Not found", "<section class='panel-section'><h1>Page not found</h1></section>", user), 404)
     def consume_email_token(self, token, purpose):
         if not token: return None
@@ -1878,10 +2064,10 @@ class ScholarHandler(BaseHTTPRequestHandler):
         career=(form.get('career') or '').strip()[:120]; education_level=(form.get('education_level') or '').strip()[:80]
         if account_type not in ACCOUNT_TYPES: account_type=''
         phone_digits=re.sub(r'\D','',phone)
+        invalid_phone = bool(phone) and (not re.fullmatch(r'[+\d\s().-]+',phone) or not 7 <= len(phone_digits) <= 16)
         if (len(name)<2 or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email)
-                or len(password)<8 or len(password)>256 or not re.fullmatch(r'[+\d\s().-]+',phone)
-                or not 7 <= len(phone_digits) <= 16):
-            return self.send_html(render_auth('signup','Please provide a name, valid email, private phone number and password of at least 8 characters.'),400)
+                or len(password)<8 or len(password)>256 or invalid_phone):
+            return self.send_html(render_auth('signup','Please provide your name, a valid email and a password of at least 8 characters. If you enter a phone number, it must be valid.'),400)
         salt, hashed=hash_password(password)
         try:
             with db() as conn:
@@ -1943,6 +2129,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
     def handle_profile_photo(self, user):
         if not user: return self.send_json({"ok":False,"error":"Login required"}, 401)
         if not self.verify_csrf(user): return self.send_json({"ok":False,"error":"CSRF check failed"}, 403)
+        if not self.valid_upload_length(): return
         try:
             payload=json.loads(self.read_body().decode())
             filename=slugify_filename(payload.get("filename","profile.jpg"))
@@ -1956,14 +2143,23 @@ class ScholarHandler(BaseHTTPRequestHandler):
                       'image/gif':(b'GIF8','.gif'), 'image/webp':(b'RIFF','.webp')}
         if mime not in signatures or not content.startswith(signatures[mime][0]) or (mime=='image/webp' and content[8:12] != b'WEBP'):
             return self.send_json({'ok':False,'error':'Choose a valid JPG, PNG, GIF or WebP image.'},400)
-        if len(content) > 10 * 1024 * 1024:
+        if len(content) > MAX_PROFILE_UPLOAD_BYTES:
             return self.send_json({"ok":False,"error":"Profile photo max is 10 MB"}, 400)
         ext=signatures[mime][1]
         filename=f"user-{user['id']}-{secrets.token_hex(8)}{ext}"
         key='profiles/'+filename; url='/uploads/profiles/'+filename
+        try:
+            remote=reserve_and_upload(key, content, mime)
+        except private_storage.StorageError:
+            return self.send_json({'ok':False,'error':'Private storage is unavailable. Please try again.'},503)
         with db() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            if not conn.execute('SELECT 1 FROM users WHERE id=?',(user['id'],)).fetchone():
+                return self.send_json({'ok':False,'error':'Account no longer exists.'},404)
+            retire_cloud_media(conn, 'owner_id=? AND project_id IS NULL AND storage_key<>?', (user['id'],key))
             conn.execute('INSERT INTO media_objects(storage_key,owner_id,project_id,mime,data,created_at) VALUES(?,?,NULL,?,?,?)',
-                         (key,user['id'],mime,content,now_iso()))
+                         (key,user['id'],mime,b'' if remote else content,now_iso()))
+            if remote: link_cloud_object(conn, 'media', key, key, len(content))
             conn.execute("UPDATE users SET profile_photo_url=? WHERE id=?", (url, user["id"]))
             conn.execute("DELETE FROM media_objects WHERE owner_id=? AND project_id IS NULL AND storage_key<>?",(user['id'],key))
         return self.send_json({"ok":True,"url":url})
@@ -2083,17 +2279,25 @@ class ScholarHandler(BaseHTTPRequestHandler):
             cleaned=normalize_slide_photo(photo_data)
         except ValueError as exc:
             return self.send_html(render_admin(user,str(exc),msg_kind='error'),400)
+        key='slides/'+secrets.token_hex(16)+'.jpg'
+        try:
+            remote=reserve_and_upload(key, cleaned, 'image/jpeg')
+        except private_storage.StorageError:
+            return self.send_html(render_admin(user,'Private storage is unavailable. Please try again.',msg_kind='error'),503)
         problem=''
         with db() as conn:
             conn.execute('BEGIN IMMEDIATE')
-            counts=conn.execute('SELECT COUNT(*) n, COALESCE(SUM(length(data)),0) used, COALESCE(MIN(position),0) first FROM slideshow_photos').fetchone()
+            counts=conn.execute("""SELECT COUNT(*) n, COALESCE(SUM(COALESCE(l.object_size,length(p.data),0)),0) used,
+                COALESCE(MIN(p.position),0) first FROM slideshow_photos p LEFT JOIN cloud_object_links l
+                ON l.kind='slide' AND l.record_key=CAST(p.id AS TEXT)""").fetchone()
             if counts['n'] >= MAX_SLIDES:
                 problem=f'The slideshow is limited to {MAX_SLIDES} photos. Remove one first.'
             elif counts['used']+len(cleaned) > MAX_SLIDE_STORAGE_BYTES:
                 problem='Slideshow storage is full. Remove photos before adding another.'
             else:
-                conn.execute("INSERT INTO slideshow_photos(bundled_path,data,caption,position,created_at) VALUES('',?,?,?,?)",
-                             (cleaned,caption,counts['first']-1,now_iso()))
+                cur=conn.execute("INSERT INTO slideshow_photos(bundled_path,data,caption,position,created_at) VALUES('',?,?,?,?)",
+                                 (b'' if remote else cleaned,caption,counts['first']-1,now_iso()))
+                if remote: link_cloud_object(conn, 'slide', str(cur.lastrowid), key, len(cleaned))
         if problem: return self.send_html(render_admin(user,problem,msg_kind='error'),400)
         return self.redirect('/admin?slide_result=added#slideshow-settings')
 
@@ -2102,6 +2306,9 @@ class ScholarHandler(BaseHTTPRequestHandler):
         if not photo_id.isdigit() or len(photo_id)>18:
             return self.send_html(render_admin(user,'Invalid photo.',msg_kind='error'),400)
         with db() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            if conn.execute('SELECT 1 FROM slideshow_photos WHERE id=?',(int(photo_id),)).fetchone():
+                retire_cloud_link(conn, 'slide', str(int(photo_id)))
             removed=conn.execute('DELETE FROM slideshow_photos WHERE id=?',(int(photo_id),)).rowcount
         if not removed: return self.send_html(render_admin(user,'Photo not found.',msg_kind='error'),404)
         return self.redirect('/admin?slide_result=removed#slideshow-settings')
@@ -2128,6 +2335,8 @@ class ScholarHandler(BaseHTTPRequestHandler):
         try:
             with db() as conn:
                 if action=='delete':
+                    conn.execute('BEGIN IMMEDIATE')
+                    retire_cloud_media(conn, 'project_id=?', (int(pid),))
                     conn.execute('DELETE FROM projects WHERE id=?',(int(pid),))
                 else:
                     status={'approve':'public','reject':'rejected','draft':'draft'}[action]
@@ -2180,6 +2389,8 @@ class ScholarHandler(BaseHTTPRequestHandler):
                     conn.execute('UPDATE users SET salt=?,password_hash=? WHERE id=?',(salt,hashed,int(uid)))
                     conn.execute('DELETE FROM sessions WHERE user_id=?',(int(uid),)); message=f"Temporary password for {target['email']}: {temp}"
                 elif action=='delete':
+                    conn.execute('BEGIN IMMEDIATE')
+                    retire_cloud_media(conn, 'owner_id=?', (int(uid),))
                     conn.execute('DELETE FROM users WHERE id=?',(int(uid),)); message='User deleted.'
         except DB_INTEGRITY_ERRORS:
             return self.send_html(render_admin(user,'This user cannot be deleted while protected financial records remain.'),400)
@@ -2369,6 +2580,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
 
     def handle_upload(self, user):
         if not self.verify_csrf(user): return self.send_json({'ok':False,'error':'CSRF check failed'},403)
+        if not self.valid_upload_length(): return
         try:
             payload=json.loads(self.read_body().decode()); pid=int(payload.get('project_id'))
             filename=slugify_filename(payload.get('filename','upload.bin'))
@@ -2377,20 +2589,38 @@ class ScholarHandler(BaseHTTPRequestHandler):
             data=payload.get('data',''); data=data.split(',',1)[1] if ',' in data else data
             content=base64.b64decode(data,validate=True)
         except Exception: return self.send_json({'ok':False,'error':'Invalid upload'},400)
-        if MAX_UPLOAD_BYTES and len(content)>MAX_UPLOAD_BYTES: return self.send_json({'ok':False,'error':'File exceeds the configured upload limit.'},400)
+        if not content: return self.send_json({'ok':False,'error':'Choose a non-empty file.'},400)
+        if len(content)>MAX_UPLOAD_BYTES: return self.send_json({'ok':False,'error':'The file exceeds the 10 MB upload limit.'},400)
+        # Reject unauthorized uploads before contacting Storage; recheck inside the
+        # final transaction in case the project was deleted concurrently.
         with db() as conn:
+            if not conn.execute('SELECT 1 FROM projects WHERE id=? AND user_id=?',(pid,user['id'])).fetchone():
+                return self.send_json({'ok':False,'error':'Project not found'},404)
+        key=f"assets/{pid}-{secrets.token_hex(8)}-{filename}"
+        try:
+            remote=reserve_and_upload(key, content, mime)
+        except private_storage.StorageError:
+            return self.send_json({'ok':False,'error':'Private storage is unavailable. Please try again.'},503)
+        with db() as conn:
+            conn.execute('BEGIN IMMEDIATE')
             project=conn.execute('SELECT id,status FROM projects WHERE id=? AND user_id=?',(pid,user['id'])).fetchone()
             if not project: return self.send_json({'ok':False,'error':'Project not found'},404)
-            key=f"assets/{pid}-{secrets.token_hex(8)}-{filename}"
             conn.execute('INSERT INTO media_objects(storage_key,owner_id,project_id,mime,data,created_at) VALUES(?,?,?,?,?,?)',
-                         (key,user['id'],pid,mime,content,now_iso()))
+                         (key,user['id'],pid,mime,b'' if remote else content,now_iso()))
+            if remote: link_cloud_object(conn, 'media', key, key, len(content))
             cur=conn.execute('INSERT INTO assets(user_id,project_id,filename,stored_path,external_url,mime,size,created_at) VALUES(?,?,?,?,?,?,?,?)',(user['id'],pid,filename,'db:'+key,'',mime,len(content),now_iso()))
             status='pending_review' if project['status']=='public' else project['status']
             conn.execute('UPDATE projects SET asset_url=?,status=?,updated_at=?,review_version=review_version+1 WHERE id=?',(f'/download?id={cur.lastrowid}',status,now_iso(),pid))
         return self.send_json({'ok':True,'download_url':f'/download?id={cur.lastrowid}','filename':filename,'review_required':status=='pending_review'})
 
 def main():
+    global CLOUD_STORAGE
+    # Do not touch the database or open a port if the private bucket is missing,
+    # public, or unreachable. There is no fallback to ephemeral files on Render.
+    CLOUD_STORAGE = configure_cloud_storage()
     init_db()
     threading.Thread(target=auto_sync_worker, daemon=True).start()
+    if CLOUD_STORAGE is not None:
+        threading.Thread(target=storage_cleanup_worker, daemon=True).start()
     httpd=ThreadingHTTPServer((HOST, PORT), ScholarHandler); print(f"70Scholar running at http://{HOST}:{PORT}", flush=True); httpd.serve_forever()
 if __name__ == "__main__": main()

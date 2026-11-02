@@ -121,6 +121,8 @@
     assetButton.addEventListener('click', function () {
       var file = assetInput.files && assetInput.files[0];
       if (!file) { setStatus(assetStatus, 'Choose a file first.', 'error'); return; }
+      var maxUpload = Number(assetBox.getAttribute('data-max-upload')) || 10 * 1024 * 1024;
+      if (!file.size || file.size > maxUpload) { setStatus(assetStatus, 'Choose a non-empty file no larger than 10 MB.', 'error'); return; }
 
       var csrf = assetBox.getAttribute('data-csrf') || '';
       var projectId = assetBox.getAttribute('data-project-id') || '';

@@ -118,7 +118,9 @@ class ScholarTests(unittest.TestCase):
         for absent in ('Real students. Real scholars. Real futures.','Real moments from real learners.','NESA','photo-gallery','students-library.jpg','https://africanscholars.yale.edu'):
             self.assertNotIn(absent,home)
         for present in ('Moments along the learning journey.','id="slideshow"','ilead-students.jpg','university-graduation.jpg','students-reading.jpg',server.HELPLINE_PHONE,server.HELPLINE_EMAIL): self.assertIn(present,home)
-        self.assertEqual(len(server.SLIDESHOW_PHOTOS),17)
+        self.assertEqual(len(server.SLIDESHOW_PHOTOS),16)
+        self.assertNotIn('slide-07.jpg', home)  # owner removed it from the live slideshow
+        self.assertIn('Verse of the day.', home)
         status,_,headers=anon.get('/programs',False)
         self.assertEqual(status,303);self.assertTrue(headers['Location'].startswith('/login'))
         status,_,_=anon.request('/programs',method='HEAD',follow=False);self.assertEqual(status,303)
@@ -129,10 +131,15 @@ class ScholarTests(unittest.TestCase):
         self.assertEqual(server.FEATURED_PROGRAMS[1]['deadline'],'2027-01-06')
         status,version,_=anon.get('/version');self.assertEqual(status,200);self.assertIn(server.APP_VERSION,version)
 
-    def test_signup_needs_phone_and_admin_grant_is_not_email_verification(self):
+    def test_signup_phone_optional_and_admin_grant_is_not_email_verification(self):
         anon=Client(self.base)
-        status,html,_=anon.post('/signup',{'name':'Jane Person','email':'jane@example.test','password':'StudentPass123!'})
-        self.assertEqual(status,400);self.assertIn('phone',html.lower())
+        status,html,_=anon.post('/signup',{'name':'No Phone','email':'no-phone@example.test','password':'StudentPass123!'})
+        self.assertEqual(status,200)
+        self.assertEqual(self.db('SELECT phone FROM users WHERE email=?',('no-phone@example.test',),True)['phone'],'')
+        status,_,_=anon.post('/login',{'email':'no-phone@example.test','password':'StudentPass123!'})
+        self.assertEqual(status,403)  # optional phone does not bypass verification
+        status,_,_=anon.post('/signup',{'name':'Bad Phone','email':'bad-phone@example.test','phone':'!','password':'StudentPass123!'})
+        self.assertEqual(status,400)
         c,uid=self.signup('Jane Person','jane@example.test')
         status,html,_=c.post('/login',{'email':'jane@example.test','password':'StudentPass123!'})
         self.assertEqual(status,403);self.assertIn('owner',html.lower())

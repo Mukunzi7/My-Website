@@ -58,7 +58,10 @@ class MigrationTests(unittest.TestCase):
             # SQLite retains this high-water mark even though the row is deleted.
             c.execute("INSERT INTO projects(id,user_id,title,category,summary,details,status,created_at,updated_at) VALUES(500,2,'Deleted synthetic','Education','x','x','draft',?,?)", (server.now_iso(), server.now_iso()))
             c.execute('DELETE FROM projects WHERE id=500')
-            c.execute('DROP TABLE media_objects')  # v21 stored uploads as files, not in the database.
+            # v21 stored uploads as local files and had none of these new tables.
+            c.execute('DROP TABLE media_objects')
+            c.execute('DROP TABLE cloud_object_links')
+            c.execute('DROP TABLE storage_cleanup_queue')
         (self.uploads / 'orphan-old.txt').write_text('unreferenced synthetic file')
 
     def drop_test_schema(self):

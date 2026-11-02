@@ -408,6 +408,20 @@ tr:last-child td { border-bottom: 0; }
 /* ---------------------------------------------------------------- v16: logo, typewriter, slideshow, features */
 .logo-img { width: clamp(52px, 5vw, 68px); height: clamp(52px, 5vw, 68px); flex: 0 0 auto; border-radius: 50%; box-shadow: 0 0 0 1px rgba(246,243,236,.45); }
 
+/* The daily verse is readable without JavaScript and independent of the hero. */
+.verse-section { padding: clamp(3rem, 6vw, 5.75rem) clamp(1.25rem, 6vw, 6rem); background: #F6F3EC; }
+.verse-inner { max-width: var(--maxw); margin: 0 auto; display: grid; grid-template-columns: minmax(0, .72fr) minmax(0, 1.28fr); gap: clamp(2rem, 6vw, 5rem); align-items: center; }
+.verse-intro h2 { max-width: 10ch; margin-bottom: .65rem; }
+.verse-date { margin: 0; color: #556078; font-size: .9rem; }
+.verse-card { margin: 0; padding: clamp(1.5rem, 4vw, 3rem); background: #fffdfa; border: 1px solid rgba(16, 21, 43, .1); border-left: 4px solid #c78327; border-radius: 2px 18px 18px 2px; box-shadow: 0 18px 50px rgba(16, 21, 43, .07); min-width: 0; }
+.verse-mark { display: block; height: 2.5rem; color: #a5681a; font-family: Georgia, serif; font-size: 4rem; line-height: 1; }
+.verse-card blockquote { margin: 0; }
+.verse-card blockquote p { margin: 0 0 1.4rem; color: var(--ink); font-family: var(--serif); font-size: clamp(1.15rem, 2vw, 1.55rem); line-height: 1.5; overflow-wrap: anywhere; }
+.verse-card figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem 1.1rem; }
+.verse-card figcaption a { color: #8b4d0b; font-weight: 800; text-decoration-thickness: 1px; text-underline-offset: .2em; }
+.verse-translation { color: #59647a; font-size: .82rem; }
+@media (max-width: 700px) { .verse-inner { grid-template-columns: minmax(0, 1fr); gap: 1.4rem; } .verse-intro h2 { max-width: none; } }
+
 .typewriter-band { padding: clamp(2.5rem, 5vw, 4.5rem) clamp(1.25rem, 6vw, 6rem); background: #0B1B4D; color: var(--paper); text-align: center; border-bottom: 4px solid var(--gold); }
 .typewriter-label { text-transform: uppercase; letter-spacing: .2em; font-size: .72rem; font-weight: 800; color: var(--gold); margin-bottom: 1rem; }
 .typewriter-line { font-family: var(--serif); font-size: clamp(1.9rem, 5vw, 4.2rem); line-height: 1.15; font-weight: 600; margin: 0; min-height: 1.25em; color: #5B9BFF; text-shadow: 0 0 38px rgba(91,155,255,.35); }

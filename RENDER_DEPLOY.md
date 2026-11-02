@@ -46,7 +46,12 @@ an independent PostgreSQL backup and test the restored site before any productio
 This version supports PostgreSQL in a private `scholar_data` schema when `DATABASE_URL`
 is present. On Render it refuses to start without PostgreSQL or a mounted SQLite disk; it
 will not silently create an empty ephemeral database. This does not make a risky deploy safe:
-a deployment can destroy the old instance's files before this code ever runs.
+a deployment can destroy the old instance's files before this code ever runs. If the owner
+explicitly chooses to proceed without the unavailable complete backup, existing live
+accounts, private projects and uploads cannot be promised or automatically imported.
+The owner accepted that risk, but it does not turn a public slideshow archive into a
+private-data backup. Recheck the live slideshow and preserve any accessible data again
+immediately before cutover.
 
 Alternatively, for a paid Render disk mounted at `/var/data`, set:
 
@@ -89,11 +94,31 @@ after the move. Verify the migrated downloads as the owner before removing the o
   `SUPABASE_DB_CA_PEM`, or set `PG_SSL_ROOT_CERT` to its path. Do not put private keys in
   either. An invalid or expired CA or hostname fails closed; no unverified connection is used.
   If the provider rotates its CA, update and retest before the old one expires.
-- On the Supabase Free plan, account records, slideshow uploads, profile photos and project
-  files all count toward the **500 MB database** limit in this implementation; it does not
-  use Supabase's separate file-storage allowance. Free projects can pause for inactivity and
-  don't offer downloadable automatic backups. Monitor usage, export and independently test
-  backups (including the `scholar_data` schema), and plan for growth.
+- Create a **new, private** Supabase Storage bucket (for example `70scholar-private`) with
+  no broad anonymous or authenticated access policies. A private bucket alone does not
+  neutralize an existing permissive `storage.objects` RLS policy. Before production,
+  explicitly test direct object reads with no login, a publishable key, and an unrelated
+  Supabase-authenticated user; none may access private project or profile objects. The app
+  uses its own authorization checks and proxies allowed files; it does not give browsers
+  its privileged key or direct object URLs. The startup check verifies the bucket's private
+  flag, not every possible RLS policy.
+- Privately set `SUPABASE_URL` (standard `https://<project-ref>.supabase.co` project URL),
+  `SUPABASE_STORAGE_BUCKET` (the exact private bucket name), and `SUPABASE_SECRET_KEY`
+  (the backend-only `sb_secret_…` key) in Render. Never share the key in chat, Git or a
+  browser. It bypasses RLS and has elevated project-wide access; rotate it if exposed.
+  Do not use an anon/publishable key here. Render PostgreSQL startup fails closed if the
+  bucket is missing, public, incorrectly configured or unreachable. Stage variables with
+  **Save only** and perform a real provider/auth/privacy test before deployment.
+- On the Supabase Free plan, new files count toward the separate **1 GB Storage** quota;
+  accounts, metadata and any legacy imported database blobs count toward the **500 MB
+  database** quota. Project files and profile photos are limited to 10 MiB each; slideshow
+  source photos to 8 MiB. Uploads are bounded before buffering. Free projects can pause
+  for inactivity and don't offer downloadable automatic backups. Keep and test consistent
+  backups of both the PostgreSQL `scholar_data` schema and the private bucket; neither
+  alone restores everything. Monitor usage and plan for growth.
+- Removed remote objects are queued for deletion and retried when Storage is available;
+  errors do not make private files public. A previously created backup can still contain
+  deleted data. The real Supabase project and its RLS policies have not yet been tested.
 - For a paid disk alternative, set `DB_PATH` and `UPLOAD_DIR` under the actual persistent
   disk mount after arranging a safe data migration. Set `PERSISTENT_DISK_MOUNT` if the
   mount is not `/var/data`.
@@ -107,9 +132,12 @@ The homepage hero displays the owner-supplied group photo as a full background a
 owner's Seven Scholars emblem. The platform name remains 70Scholar. Sign in with the owner account
 and choose **Admin → Slideshow photos** to add or remove pictures. The first v19 startup
 imports the bundled slideshow into the database once; later owner removals are retained if
-that database survives. Uploaded images are normalized and stored in the configured database.
-Use PostgreSQL or a persistent disk and independent backups; free Render SQLite alone can
-lose images and the chosen slideshow at any time. Permission and any required consent must
+that database survives. The 2026-11-02 public snapshot had 16 bundled photos and excluded
+`slide-07.jpg`; the fresh-database default matches that snapshot but must be rechecked
+immediately before cutover. New images are normalized and stored in the private bucket when
+configured; older imported image blobs remain in the database. Use PostgreSQL and the
+private bucket, or a persistent disk, together with independent backups; free Render SQLite
+alone can lose images and the chosen slideshow at any time. Permission and any required consent must
 be obtained before public publication, especially for identifiable minors.
 
 ## v18 migration impact
@@ -130,9 +158,9 @@ uploads does not revoke old externally hosted copies.
 
 1. Check Render deployment status and logs, then open
    <https://seven0scholar-7cjc.onrender.com/version>. Expected:
-   `70Scholar v22-bootcamps - privacy, owner review and funding`.
+   `70Scholar v22-bootcamps-verse - privacy, owner review and funding`.
 2. In a private browser, `/programs` should redirect to login; the homepage should show the
-   slideshow and no seven-image gallery or official program links.
+   daily Bible verse and slideshow, and no seven-image gallery or official program links.
 3. Log in as owner, set an owner payment link if ready, and inspect review/user counts. Verify
    signup with an external email inbox or explicitly grant a test account access.
 4. Test moderation, approval, and a **test** payment request. Do not mark a real payment

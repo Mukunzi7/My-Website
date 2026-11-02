@@ -33,7 +33,8 @@ def init_for_isolated_schema():
 server.init_db = init_for_isolated_schema
 names = ['test_v17', 'test_v18_security.EmailAndFetchTests', 'test_v19_slideshow',
          'test_v20_branding', 'test_v21_contact', 'test_v22_bootcamps',
-         'test_v22_persistence', 'test_v22_storage_safety']
+         'test_v22_persistence', 'test_v22_storage_safety',
+         'test_v23_daily_verse', 'test_v23_private_storage']
 suite = unittest.TestLoader().loadTestsFromNames(names)
 result = unittest.TextTestRunner(verbosity=2).run(suite)
 sys.exit(not result.wasSuccessful())

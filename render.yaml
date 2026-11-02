@@ -26,6 +26,13 @@ services:
       # and a migration/restore has been verified; never commit the database URL.
       - key: DATABASE_URL
         sync: false
+      # Private bucket credentials are server-only. Never put the secret key in Git.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        sync: false
       - key: BIRD_API_KEY
         sync: false
       - key: BIRD_FROM
@@ -33,9 +40,10 @@ services:
       - key: BIRD_REGION
         sync: false
 
-# PERSISTENT STORAGE: DATABASE_URL points to an external PostgreSQL database.
-# On Render the app refuses to fall back to ephemeral SQLite when the URL is
-# missing. An alternative is a paid disk, but attaching one restarts the service
+# PERSISTENT STORAGE: DATABASE_URL points to an external PostgreSQL database;
+# SUPABASE_* configure a server-only private file bucket. Startup fails if the
+# Render PostgreSQL service lacks a verified private bucket. An alternative is a
+# paid disk, but attaching one restarts the service
 # and DOES NOT migrate its old files. Back up and verify the live data first.
 # If using a paid disk instead, uncomment both blocks below:
 #
