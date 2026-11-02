@@ -213,6 +213,7 @@ class ScholarTests(unittest.TestCase):
         self.assertEqual(self.admin.get(f'/download?id={asset_id}')[0],200)
         # A copied legacy flat upload can be found after moving to a persistent directory.
         old_path=self.db('SELECT stored_path FROM assets WHERE id=?',(asset_id,),True)['stored_path']
+        (server.UPLOAD_DIR / Path(old_path).name).write_bytes(b'private prototype content')
         with server.db() as conn:
             conn.execute('UPDATE assets SET stored_path=? WHERE id=?',('/old/render/uploads/'+Path(old_path).name,asset_id))
         self.assertEqual(self.admin.get(f'/download?id={asset_id}')[0],200)

@@ -1,2 +1,4 @@
 # Pillow validates and safely normalizes owner-uploaded slideshow photos.
 Pillow>=11.3.0,<13.0.0
+# Hosted PostgreSQL for durable account, slideshow and private-media storage.
+psycopg[binary]>=3.2,<4

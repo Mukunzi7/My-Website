@@ -22,6 +22,10 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
+      # Set privately only after the old live database and files have been backed up
+      # and a migration/restore has been verified; never commit the database URL.
+      - key: DATABASE_URL
+        sync: false
       - key: BIRD_API_KEY
         sync: false
       - key: BIRD_FROM
@@ -29,9 +33,11 @@ services:
       - key: BIRD_REGION
         sync: false
 
-# PERSISTENT STORAGE (recommended before real users sign up):
-# The free plan has no disk, so SQLite and uploads can be lost during deploy/restart.
-# To enable, upgrade to a paid plan and uncomment both blocks below:
+# PERSISTENT STORAGE: DATABASE_URL points to an external PostgreSQL database.
+# On Render the app refuses to fall back to ephemeral SQLite when the URL is
+# missing. An alternative is a paid disk, but attaching one restarts the service
+# and DOES NOT migrate its old files. Back up and verify the live data first.
+# If using a paid disk instead, uncomment both blocks below:
 #
 #    plan: starter          # replace "plan: free" above
 #    disk:

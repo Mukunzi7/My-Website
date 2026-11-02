@@ -11,11 +11,44 @@ The free-plan service declared in `render.yaml` has an ephemeral filesystem. Dep
 restarts or instance replacement can erase the live SQLite database and uploads. The copy
 in a developer's workspace is not a backup of Render's live data. Do not deploy over
 important live records until you have exported/backed up the database and files and verified
-that backup. Provision a paid Render service with a persistent disk or migrate to a
-supported persistent database/storage solution; this code currently implements SQLite, not
-PostgreSQL.
+that backup. Render Free provides no Shell/SSH or persistent disk. Ask Render support
+whether it can create a consistent, private export of the still-running instance's SQLite
+database AND uploads. Do not restart, upgrade, deploy, or change the active data source
+in an attempt to get access. Data already removed from an ephemeral instance cannot be
+recovered by a new deployment. A public slideshow download is not a backup of accounts,
+projects or private files. Before cutover, make and test a complete database/files backup
+and a migration into a separate target; verify both counts and individual records/files.
+Writes made after a snapshot are **not** in that snapshot; coordinate a maintenance window
+and reconcile any later changes before cutover. Retain the original backup privately even
+if an import succeeds.
 
-For a Render disk mounted at `/var/data`, set:
+### Offline migration helper (not a live export)
+
+Once you genuinely have a consistent v21 SQLite snapshot AND its matching complete
+`uploads` directory, `migrate_sqlite.py` can first inspect them offline:
+
+```text
+python3 migrate_sqlite.py --sqlite /private/path/backup.sqlite3 --uploads /private/path/uploads --verify-only
+```
+
+It checks database integrity, foreign keys, expected v21 tables, every referenced profile
+and project file, and bundled slide names. It cannot prove the snapshot has the latest live
+writes. Importing without `--verify-only` asks for confirmation and a hidden PostgreSQL
+session-pooler URL if `DATABASE_URL` is not already in the environment. Run it only from a
+trusted private machine against a **new** target database/schema; the helper refuses to
+replace an existing `scholar_data` schema. It checks copied row values, counts, and file
+checksums, keeps deleted-ID high-water marks, and publishes a temporary private schema
+only after verification. Unreferenced files remain solely in the original backup. It does
+not switch the Render site or test the actual Supabase project. Check free-plan capacity,
+provider connectivity, privacy, and the migration on isolated synthetic data first; make
+an independent PostgreSQL backup and test the restored site before any production cutover.
+
+This version supports PostgreSQL in a private `scholar_data` schema when `DATABASE_URL`
+is present. On Render it refuses to start without PostgreSQL or a mounted SQLite disk; it
+will not silently create an empty ephemeral database. This does not make a risky deploy safe:
+a deployment can destroy the old instance's files before this code ever runs.
+
+Alternatively, for a paid Render disk mounted at `/var/data`, set:
 
 ```text
 DB_PATH=/var/data/70scholar.sqlite3
@@ -42,7 +75,28 @@ after the move. Verify the migrated downloads as the owner before removing the o
   `BIRD_REGION`) or SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`,
   `SMTP_FROM`, `SMTP_TLS`) to deliver verification/reset emails. Bird's onboarding sender is
   sandbox-restricted; see `BIRD_EMAIL_SETUP.md`.
-- Set `DB_PATH` and `UPLOAD_DIR` to a persistent disk after arranging a safe data migration.
+- For Supabase: use the IPv4-compatible **session pooler** PostgreSQL URL in `DATABASE_URL`,
+  privately in Render's environment settings (never in Git, chat or screenshots). Replace
+  its password placeholder, URL-encoding special characters as necessary. Do not use the
+  public API URL, anon key, service key, or a transaction-pooler URL. Render's **Save only**
+  option stages changes without an immediate redeploy, but even then do not cut over until
+  live data is backed up and migrated safely.
+- TLS uses `sslmode=verify-full`. For `*.pooler.supabase.com`, the app uses the bundled
+  public Supabase Root 2021 CA certificate (SHA-256 DER fingerprint
+  `80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA`,
+  expires 26 April 2031); it is not a credential. For an updated CA, download it
+  from Supabase Database Settings and supply its PEM content in the Render variable
+  `SUPABASE_DB_CA_PEM`, or set `PG_SSL_ROOT_CERT` to its path. Do not put private keys in
+  either. An invalid or expired CA or hostname fails closed; no unverified connection is used.
+  If the provider rotates its CA, update and retest before the old one expires.
+- On the Supabase Free plan, account records, slideshow uploads, profile photos and project
+  files all count toward the **500 MB database** limit in this implementation; it does not
+  use Supabase's separate file-storage allowance. Free projects can pause for inactivity and
+  don't offer downloadable automatic backups. Monitor usage, export and independently test
+  backups (including the `scholar_data` schema), and plan for growth.
+- For a paid disk alternative, set `DB_PATH` and `UPLOAD_DIR` under the actual persistent
+  disk mount after arranging a safe data migration. Set `PERSISTENT_DISK_MOUNT` if the
+  mount is not `/var/data`.
 
 Payment links are not deployment secrets: the owner configures their own HTTPS checkout
 link from **Admin → Funding**. No funding action is available before that.
@@ -53,9 +107,9 @@ The homepage hero displays the owner-supplied group photo as a full background a
 owner's Seven Scholars emblem. The platform name remains 70Scholar. Sign in with the owner account
 and choose **Admin → Slideshow photos** to add or remove pictures. The first v19 startup
 imports the bundled slideshow into the database once; later owner removals are retained if
-that database survives. Uploaded images are normalized and stored inside SQLite. Without a
-persistent disk, a deploy or restart can erase both the images and the chosen slideshow;
-back up the database and use persistent storage. Permission and any required consent must
+that database survives. Uploaded images are normalized and stored in the configured database.
+Use PostgreSQL or a persistent disk and independent backups; free Render SQLite alone can
+lose images and the chosen slideshow at any time. Permission and any required consent must
 be obtained before public publication, especially for identifiable minors.
 
 ## v18 migration impact
@@ -76,7 +130,7 @@ uploads does not revoke old externally hosted copies.
 
 1. Check Render deployment status and logs, then open
    <https://seven0scholar-7cjc.onrender.com/version>. Expected:
-   `70Scholar v21-contact - privacy, owner review and funding`.
+   `70Scholar v22-bootcamps - privacy, owner review and funding`.
 2. In a private browser, `/programs` should redirect to login; the homepage should show the
    slideshow and no seven-image gallery or official program links.
 3. Log in as owner, set an owner payment link if ready, and inspect review/user counts. Verify

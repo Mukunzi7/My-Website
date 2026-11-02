@@ -18,6 +18,12 @@ from contextlib import contextmanager
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse, urlencode, urljoin
 
+import pg_compat
+
+DB_INTEGRITY_ERRORS = (sqlite3.IntegrityError,) + ((pg_compat.psycopg.IntegrityError,) if pg_compat.psycopg else ())
+DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
+PG_SCHEMA = 'scholar_data'
+
 ROOT = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("DB_PATH", str(ROOT / "edubridge.sqlite3")))
 STATIC_DIR = ROOT / "static"
@@ -25,7 +31,7 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 APP_NAME = "70Scholar"
-APP_VERSION = "v21-contact"
+APP_VERSION = "v22-bootcamps"
 COMPANY_NAME = "Nexus Company Ltd"
 APP_TAGLINE = "Find the opportunity. Show the build. Start the conversation."
 OWNER_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "honoremukunzi6@gmail.com").strip().lower()
@@ -76,6 +82,17 @@ FEATURED_PROGRAMS = [
  {"title":"Erasmus Mundus Joint Masters","type":"Scholarship","provider":"European Union / Erasmus+","country":"Europe / global","level":"Bachelor's graduates or final-year bachelor's students worldwide","deadline":"See official page","url":"https://erasmus-plus.ec.europa.eu/opportunities/individuals/students/erasmus-mundus-joint-masters","summary":"One- to two-year joint master's degrees taught across several universities, with competitive full scholarships covering participation costs, travel, visa and living allowance. Most applications open October–January.","tags":"Erasmus Mundus, Europe, masters, scholarship"},
  {"title":"DAAD Development-Related Postgraduate Courses (EPOS)","type":"Scholarship","provider":"German Academic Exchange Service (DAAD)","country":"Germany","level":"Graduates from developing countries with at least two years of relevant work experience","deadline":"See official page","url":"https://www2.daad.de/deutschland/stipendium/datenbank/en/21148-scholarship-database/?detail=50076777","summary":"Fully funded master's and doctoral scholarships in development-related fields at German universities. Deadlines vary by course; applications go directly to the chosen programme.","tags":"DAAD, Germany, EPOS, development, masters, PhD"},
 ]
+
+# Official programme pages checked 2 November 2026. Where the next cycle has not
+# been published, explicitly say so rather than presenting a previous intake as open.
+SUMMER_BOOTCAMPS = [
+ {"title":"Isomo Academy Summer Bootcamp","type":"Summer bootcamp","provider":"Isomo / Bridge2Rwanda","country":"Rwanda","level":"Students in Rwanda currently in Senior 4 or an equivalent grade; confirm equivalence","deadline":"2026 applications closed; 2027 to be announced","url":"https://www.isomo-rw.com/application-isomo-academy/","summary":"A free residential bootcamp in English, critical thinking, digital skills, leadership and university preparation. The 2026 application is closed; check the official page for the next intake.","tags":"Isomo, Bridge2Rwanda, Rwanda, English, college prep, leadership, free, summer"},
+ {"title":"Light4Refugee Scholars Summer Bootcamp","type":"Summer bootcamp","provider":"Light4Refugee","country":"Rwanda","level":"Refugee youth; past sessions included Senior 6 students and recent graduates; confirm current criteria","deadline":"2026 session passed; check next intake","url":"https://light4refugee.org/programs","summary":"A residential university-preparation and entrepreneurship bootcamp. Light4Refugee describes its iLaunch programme as free for eligible students; confirm the next camp's costs, eligibility and dates with the organiser.","tags":"Light4Refugee, Rwanda, refugees, university preparation, leadership, summer"},
+ {"title":"Nexus Camp Kigali","type":"Summer bootcamp","provider":"Nexus Camp","country":"Kigali, Rwanda","level":"2026 eligibility: students aged 18–20; check 2027 criteria","deadline":"Spring 2027; date to be announced","url":"https://nexuscamp.app/","summary":"A discussion-based camp on reasoning, decision-making and learning. The 2026 camp covered accommodation, meals and materials; the organiser says 2027 applications open in spring. Verify 2027 costs and dates.","tags":"Nexus Camp, Rwanda, Kigali, reasoning, science, summer"},
+ {"title":"ALA Engineering Leadership Program 2027","type":"Summer bootcamp","provider":"African Leadership Academy / Chevron","country":"South Africa / Africa","level":"High school students aged 15–18 interested in STEM","deadline":"Applications expected early 2027; verify","url":"https://www.africanleadershipacademy.org/programs/short-programs/","summary":"Engineering, problem-solving and leadership for African students, scheduled for 28 June–11 July 2027. The organiser says applications open in early 2027; check fees and requirements.","tags":"ALA, Chevron, Africa, engineering, STEM, leadership, summer"},
+ {"title":"ALA Global Scholars Program 2027","type":"Summer bootcamp","provider":"African Leadership Academy","country":"Johannesburg, South Africa","level":"Students aged 13–19 from around the world","deadline":"See official page","url":"https://www.africanleadershipacademy.org/programs/short-programs/","summary":"Explore or Engage leadership programmes, June–August 2027. Paid: African-resident tuition is US $2,800 for Explore or $4,250 for Engage. ALA also lists a $25 application fee and $500 deposit; confirm terms and any aid.","tags":"ALA, Global Scholars, Africa, leadership, entrepreneurship, paid, summer"},
+]
+FEATURED_PROGRAMS.extend(SUMMER_BOOTCAMPS)
 
 PREUNI_COURSES = [
     {"title":"Academic English for University","category":"Pre-university","level":"Secondary → University","duration":"8 weeks","summary":"Essay writing, academic reading, citation, and presentation skills for university study.","topics":["Academic vocabulary","Essay structure","Referencing","Seminar speaking"]},
@@ -129,10 +146,14 @@ def slugify_filename(name: str) -> str:
 
 @contextmanager
 def db():
-    """Open a SQLite connection and always close it when the block ends."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    """Open durable PostgreSQL when configured, otherwise local SQLite for development."""
+    if DATABASE_URL:
+        # Fail closed if the remote store is unavailable; never fall back silently.
+        conn = pg_compat.Connection(DATABASE_URL, PG_SCHEMA)
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
     try:
         yield conn
         conn.commit()
@@ -250,7 +271,16 @@ def send_password_reset_email(user_id: int, email: str, name: str) -> None:
     send_email(email, "Reset your 70Scholar password", text, html_msg)
 
 def init_db() -> None:
+    if os.environ.get('RENDER', '').lower() == 'true' and not DATABASE_URL:
+        # Never silently start an empty ephemeral database on Render. SQLite is
+        # allowed only when both the DB and legacy uploads are on a mounted disk.
+        mount = Path(os.environ.get('PERSISTENT_DISK_MOUNT', '/var/data')).resolve()
+        if not (mount.is_mount() and DB_PATH.resolve().is_relative_to(mount)
+                and UPLOAD_DIR.resolve().is_relative_to(mount)):
+            raise RuntimeError('Persistent storage is required on Render: configure DATABASE_URL or a mounted disk for both DB_PATH and UPLOAD_DIR.')
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True); STATIC_DIR.mkdir(parents=True, exist_ok=True)
+    if DATABASE_URL:
+        pg_compat.ensure_private_schema(DATABASE_URL, PG_SCHEMA)
     with db() as conn:
         conn.executescript('''
         CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,email TEXT NOT NULL UNIQUE COLLATE NOCASE,password_hash TEXT NOT NULL,salt TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'student',email_verified INTEGER NOT NULL DEFAULT 0,profile_photo_url TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
@@ -277,7 +307,9 @@ def init_db() -> None:
         );
         CREATE TABLE IF NOT EXISTS feed_sources(id INTEGER PRIMARY KEY AUTOINCREMENT,url TEXT NOT NULL UNIQUE,added_at TEXT NOT NULL,last_fetched TEXT NOT NULL DEFAULT '',enabled INTEGER NOT NULL DEFAULT 1);
         CREATE TABLE IF NOT EXISTS opportunity_submissions(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,type TEXT NOT NULL,title TEXT NOT NULL,provider TEXT NOT NULL,country TEXT NOT NULL,level TEXT NOT NULL,deadline TEXT NOT NULL,url TEXT NOT NULL,summary TEXT NOT NULL,tags TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,reviewed_at TEXT NOT NULL DEFAULT '');
-        CREATE TABLE IF NOT EXISTS course_enrolments(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,course_key TEXT NOT NULL,kind TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(user_id,course_key,kind));''')
+        CREATE TABLE IF NOT EXISTS course_enrolments(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,course_key TEXT NOT NULL,kind TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(user_id,course_key,kind));
+        CREATE TABLE IF NOT EXISTS media_objects(storage_key TEXT PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,mime TEXT NOT NULL,data BLOB NOT NULL,created_at TEXT NOT NULL);
+        CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique ON users(lower(email));''')
         # Lightweight migrations for older local SQLite files.
         for col, ddl in {
             "mobile_money_name": "ALTER TABLE projects ADD COLUMN mobile_money_name TEXT NOT NULL DEFAULT ''",
@@ -350,7 +382,7 @@ def init_db() -> None:
             salt, hashed = hash_password(configured_password or secrets.token_urlsafe(32))
             conn.execute("INSERT INTO users(name,email,password_hash,salt,role,email_verified,admin_approved,created_at) VALUES(?,?,?,?,?,?,?,?)", ("70Scholar Owner Admin",admin_email,hashed,salt,"admin",0,1,now_iso()))
             if not configured_password:
-                conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('admin_bootstrap_locked','1')")
+                conn.execute("INSERT INTO settings(key,value) VALUES('admin_bootstrap_locked','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value")
                 print('WARNING: set a unique ADMIN_PASSWORD of at least 8 characters and restart to unlock the new owner account.',file=sys.stderr)
         else:
             vulnerable_default=verify_password('Admin123!',existing_admin['salt'],existing_admin['password_hash'])
@@ -361,7 +393,7 @@ def init_db() -> None:
                 if configured_password:
                     conn.execute("DELETE FROM settings WHERE key='admin_bootstrap_locked'")
                 else:
-                    conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('admin_bootstrap_locked','1')")
+                    conn.execute("INSERT INTO settings(key,value) VALUES('admin_bootstrap_locked','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value")
                     print('WARNING: the insecure default admin password was disabled. Set a unique ADMIN_PASSWORD and restart.',file=sys.stderr)
             conn.execute("UPDATE users SET role='admin',admin_approved=1,banned=0,ban_reason='' WHERE email=?",(admin_email,))
         # Only the configured owner email may remain admin. Others are downgraded.
@@ -399,6 +431,9 @@ def init_db() -> None:
         # Backfill auto-generated descriptions for seeded opportunities.
         for row in conn.execute("SELECT id,type,title,provider,country,level,deadline,summary,auto_description FROM opportunities WHERE auto_description=''").fetchall():
             conn.execute("UPDATE opportunities SET auto_description=? WHERE id=?", (make_auto_description(row), row["id"]))
+    if DATABASE_URL:
+        # Supabase may install broad role defaults. Revoke again after creating tables.
+        pg_compat.ensure_private_schema(DATABASE_URL, PG_SCHEMA)
 
 def get_setting(key: str, default: str = "") -> str:
     with db() as conn:
@@ -765,12 +800,12 @@ def render_home(user):
     final_cta_section = '''<section class="final-cta" id="final-cta"><h2>Cross over.</h2><p>Somewhere on the other side, there's a deadline that hasn't found you yet. Better to be early.</p><a href="/signup" class="cta-primary">Create your free workspace <span class="arrow">→</span></a></section>'''
     programs_section = """<section class="programs-section"><div class="programs-inner">
       <p class="eyebrow">Explore programmes</p><h2>Find a programme for your next step.</h2>
-      <p>Sign in to browse featured programmes, check their requirements and follow their official application links.</p>
+      <p>Sign in to browse summer bootcamps and featured programmes, check their requirements and follow their official links.</p>
       <a class="cta-primary" href="/programs">Explore featured programs <span class="arrow">→</span></a>
       </div></section>"""
     body = (hero_section + render_typewriter() + journey_section + opportunities_section
             + programs_section + gap_section + render_slideshow()
-            + workspace_section + story_section + render_extra_features() + final_cta_section)
+            + workspace_section + story_section + render_extra_features(stats["opportunities"]) + final_cta_section)
     return page_shell("Future waiting to be found", body, user)
 
 SLIDESHOW_PHOTOS = [
@@ -874,9 +909,9 @@ def render_typewriter() -> str:
       <p class="typewriter-line"><span id="typewriter"></span><span class="typewriter-caret" aria-hidden="true"></span></p>
       <p class="typewriter-sub">Opportunities, courses, exam prep, applications and funding — built for students who are ready to move.</p></section>"""
 
-def render_extra_features() -> str:
+def render_extra_features(opportunity_count: int) -> str:
     """Extra homepage sections: feature grid, live stats, how-it-works, FAQ, CTA."""
-    return """<section class="feature-section" id="features">
+    return f"""<section class="feature-section" id="features">
       <div class="feature-inner"><p class="eyebrow eyebrow-dark">Built for the whole journey</p>
       <h2>One account. Every step from discovery to funding.</h2>
       <div class="feature-grid">
@@ -888,10 +923,10 @@ def render_extra_features() -> str:
         <a class="feature-tile" href="/signup"><span class="feature-icon">🔐</span><h3>Your private workspace</h3><p>Drafts, uploads, saved listings and messages in one place.</p></a>
       </div></div></section>
     <section class="trust-section"><div class="trust-inner">
-      <div class="trust-stat"><strong data-count="37">0</strong><span>opportunities listed</span></div>
-      <div class="trust-stat"><strong data-count="16">0</strong><span>featured programmes</span></div>
-      <div class="trust-stat"><strong data-count="6">0</strong><span>pre-university courses</span></div>
-      <div class="trust-stat"><strong data-count="6">0</strong><span>exam prep tracks</span></div>
+      <div class="trust-stat"><strong data-count="{opportunity_count}">{opportunity_count}</strong><span>opportunities listed</span></div>
+      <div class="trust-stat"><strong data-count="{len(FEATURED_PROGRAMS)}">{len(FEATURED_PROGRAMS)}</strong><span>featured programmes</span></div>
+      <div class="trust-stat"><strong data-count="{len(PREUNI_COURSES)}">{len(PREUNI_COURSES)}</strong><span>pre-university courses</span></div>
+      <div class="trust-stat"><strong data-count="{len(EXAM_PREP)}">{len(EXAM_PREP)}</strong><span>exam prep tracks</span></div>
     </div></section>
     <section class="faq-section"><div class="faq-inner"><p class="eyebrow eyebrow-dark">Good to know</p><h2>Questions students ask us.</h2>
       <details class="faq-item"><summary>Do I need an account to see opportunities?</summary><p>Yes. Create a free account or log in to browse opportunities, courses, exam prep, the marketplace and your workspace. The homepage stays open to everyone.</p></details>
@@ -943,20 +978,28 @@ def render_exams(user, msg: str = ""):
     return page_shell("Exam preparation", body, user, "exams")
 
 def render_programs(user):
-    cards = "".join([
-        hover_card(
-            f"""<article class="course-card program-card"><span class="tag">{e(pr['type'])}</span>
-            <h3>{e(pr['title'])}</h3><p class="provider">{e(pr['provider'])} · {e(pr['country'])}</p>
-            <p class="deadline">{e(deadline_badge(pr['deadline']))}</p><p>{e(pr['summary'])}</p>
-            <p class="provider">{e(pr['level'])}</p>
-            <a class="cta-primary slim" href="{e(pr['url'])}" target="_blank" rel="noopener">Official page ↗</a></article>""",
-            f"{pr['title']} by {pr['provider']}. {pr['summary']} Eligible: {pr['level']}. Location: {pr['country']}. Deadline: {pr['deadline']}. Always confirm on the official page.",
-            "course-wrap") for pr in FEATURED_PROGRAMS
-    ])
+    def program_cards(programs):
+        return "".join(
+            hover_card(
+                f"""<article class="course-card program-card"><span class="tag">{e(pr['type'])}</span>
+                <h3>{e(pr['title'])}</h3><p class="provider">{e(pr['provider'])} · {e(pr['country'])}</p>
+                <p class="deadline">{e(deadline_badge(pr['deadline']))}</p><p>{e(pr['summary'])}</p>
+                <p class="provider">{e(pr['level'])}</p>
+                <a class="cta-primary slim" href="{e(pr['url'])}" target="_blank" rel="noopener noreferrer">Official page ↗</a></article>""",
+                f"{pr['title']} by {pr['provider']}. {pr['summary']} Eligible: {pr['level']}. Location: {pr['country']}. Deadline: {pr['deadline']}. Always confirm on the official page.",
+                "course-wrap") for pr in programs)
+    bootcamp_cards = program_cards(SUMMER_BOOTCAMPS)
+    other_cards = program_cards([pr for pr in FEATURED_PROGRAMS if pr['type'] != 'Summer bootcamp'])
     body = f"""<section class="page-hero compact"><p class="eyebrow">Featured programmes</p>
-      <h1>YYAS, YYGS, RSI and more.</h1><p>{len(FEATURED_PROGRAMS)} real programmes with official links, eligibility and deadlines in one place.</p></section>
-      <section class="panel-section"><div class="course-grid">{cards}</div>
-      <p class="muted">Deadlines change each year — always confirm dates and eligibility on the official page before applying.</p></section>"""
+      <h1>Summer bootcamps and more.</h1><p>Discover {len(FEATURED_PROGRAMS)} programmes, including learning experiences in Rwanda and across Africa. Check each organiser's official page for current dates, eligibility and costs.</p></section>
+      <section class="panel-section">
+        <div class="program-group" id="summer-bootcamps"><div class="program-group-heading"><p class="eyebrow eyebrow-dark">Learn, lead, grow</p><h2>Summer bootcamps</h2>
+          <p class="muted">Explore Isomo Academy and more. Some programmes are free, others charge fees; applications may be closed or not yet announced.</p></div>
+          <div class="course-grid">{bootcamp_cards}</div></div>
+        <div class="program-group" id="more-programs"><div class="program-group-heading"><p class="eyebrow eyebrow-dark">Keep exploring</p><h2>More programmes and scholarships</h2>
+          <p class="muted">Find university preparation, research and scholarship opportunities.</p></div>
+          <div class="course-grid">{other_cards}</div></div>
+      <p class="muted program-sources-note">Deadlines and eligibility can change — always confirm details and fees on the official page before applying.</p></section>"""
     return page_shell("Featured programs", body, user, "programs")
 
 def render_submit(user, msg: str = "", kind: str = "success"):
@@ -1085,9 +1128,9 @@ def render_opportunities(user, query):
             saved = item["id"] in bookmarks
             save_button = f"""<form method="post" action="/bookmark" class="inline-form"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><input type="hidden" name="opportunity_id" value="{item['id']}"><button class="ghost-button" type="submit">{'Saved ✓' if saved else 'Save'}</button></form>"""
         else: save_button = "<a class='ghost-button' href='/login'>Log in to save</a>"
-        cards.append(f"""<article class="listing-card"><div class="listing-top"><span class="tag">{e(item['type'])}</span><span class="deadline">{e(deadline_badge(item['deadline']))}</span></div><h3>{e(item['title'])}</h3><p class="provider">{e(item['provider'])} · {e(item['country'])}</p><p>{e(item['summary'])}</p><dl class="mini-meta"><div><dt>Level</dt><dd>{e(item['level'])}</dd></div><div><dt>Deadline</dt><dd>{e(item['deadline'])}</dd></div></dl><p class="source">Source: {e(item['source'])}</p><div class="card-actions"><a class="cta-primary slim" target="_blank" rel="noopener" href="{e(anchor_url(item['url']))}">Apply on source ↗</a>{save_button}</div></article>""")
+        cards.append(f"""<article class="listing-card"><div class="listing-top"><span class="tag">{e(item['type'])}</span><span class="deadline">{e(deadline_badge(item['deadline']))}</span></div><h3>{e(item['title'])}</h3><p class="provider">{e(item['provider'])} · {e(item['country'])}</p><p>{e(item['summary'])}</p><dl class="mini-meta"><div><dt>Level</dt><dd>{e(item['level'])}</dd></div><div><dt>Deadline</dt><dd>{e(item['deadline'])}</dd></div></dl><p class="source">Source: {e(item['source'])}</p><div class="card-actions"><a class="cta-primary slim" target="_blank" rel="noopener" href="{e(anchor_url(item['url']))}">Official page ↗</a>{save_button}</div></article>""")
     def sel(x): return "selected" if typ == x else ""
-    body = f"""<section class="page-hero compact"><p class="eyebrow">Opportunity finder</p><h1>Real applications, contests, internships, and grants.</h1><p>These seed listings are current starting points for August 2026. Always verify the final deadline and eligibility on the official page before applying.</p></section><section class="panel-section"><form class="filter-bar" method="get" action="/opportunities"><input name="q" value="{e(q)}" placeholder="Search Rwanda, AI, climate, internship..."><select name="type"><option value="">All types</option><option {sel('Scholarship')} value="Scholarship">Scholarships</option><option {sel('Internship')} value="Internship">Internships</option><option {sel('Competition')} value="Competition">Competitions</option><option {sel('Grant')} value="Grant">Grants</option><option {sel('Hackathon')} value="Hackathon">Hackathons</option></select><button class="cta-primary slim" type="submit">Filter</button></form><div class="listing-grid">{''.join(cards) if cards else '<p class="empty">No matches yet. Try a different search.</p>'}</div></section>"""
+    body = f"""<section class="page-hero compact"><p class="eyebrow">Opportunity finder</p><h1>Real applications, contests, internships, and grants.</h1><p>Find scholarships, summer programmes and bootcamps here. Application status, dates, costs and eligibility can change; check the official page before applying.</p></section><section class="panel-section"><form class="filter-bar" method="get" action="/opportunities"><input name="q" value="{e(q)}" placeholder="Search Rwanda, AI, climate, internship..."><select name="type"><option value="">All types</option><option {sel('Scholarship')} value="Scholarship">Scholarships</option><option {sel('Internship')} value="Internship">Internships</option><option {sel('Competition')} value="Competition">Competitions</option><option {sel('Grant')} value="Grant">Grants</option><option {sel('Hackathon')} value="Hackathon">Hackathons</option><option {sel('Summer bootcamp')} value="Summer bootcamp">Summer bootcamps</option><option {sel('Summer program')} value="Summer program">Summer programmes</option></select><button class="cta-primary slim" type="submit">Filter</button></form><div class="listing-grid">{''.join(cards) if cards else '<p class="empty">No matches yet. Try a different search.</p>'}</div></section>"""
     return page_shell("Opportunities", body, user, "opportunities")
 
 def render_dashboard(user):
@@ -1356,6 +1399,7 @@ def render_admin(user, msg='', query=None, msg_kind='success'):
     auto_on=get_setting('auto_sync','0')=='1'
     owner_link=get_setting('owner_payment_link','')
     blocked_phrases=get_setting('message_blocked_phrases','')
+    storage_note = ('Photos and account data use the configured database. Keep independent backups; free storage has size and inactivity limits.' if DATABASE_URL else 'Without a persistent disk, a Render deploy or restart can erase slideshow changes and other data. Keep backups.')
     body=f"""<section class='page-hero compact admin-hero'><p class='eyebrow'>Admin command center</p><h1>Manage reviews, people and funding.</h1><p>Owner-only tools for {e(OWNER_ADMIN_EMAIL)}. Personal records below are private.</p></section>
     <section class='admin-shell'><aside class='admin-sidebar'><p class='eyebrow eyebrow-dark'>Workspace</p><h2>Admin menu</h2><nav class='admin-nav' aria-label='Admin sections'><a href='#review'>① Review queue</a><a href='#content'>② Content</a><a href='#slideshow-settings' class='admin-nav-child'>↳ Slideshow photos</a><a href='#automation'>③ Automation</a><a href='#people'>④ People</a><a href='#safety'>⑤ Message safety</a><a href='#funding'>⑥ Funding</a></nav><p class='admin-sidebar-note'>Review project text, files and opportunity links before publication.</p></aside><div class='admin-main'><div class='stats-row'>{cards}</div>{flash(msg,msg_kind) if msg else ''}
     <h2 class='admin-group-title' id='review'>1 · Review queue</h2><div class='dash-panel wide' id='submissions'><h2>Community submissions</h2><p class='muted'>Submissions stay private until approved. Verify the original page and deadlines.</p><div class='mini-grid'>{sub_rows or '<p class="empty">No submissions waiting for review.</p>'}</div></div>
@@ -1363,7 +1407,7 @@ def render_admin(user, msg='', query=None, msg_kind='success'):
     <h2 class='admin-group-title' id='content'>2 · Content &amp; catalogue</h2>
     <div class='dash-panel wide slideshow-admin' id='slideshow-settings'><div class='slide-admin-heading'><div><p class='eyebrow eyebrow-dark'>Homepage</p><h2>Slideshow photos</h2><p class='muted'>Add a new photo or remove any existing photo below. New photos appear first.</p></div><span class='slide-admin-count'>{len(slideshow_photos)} / {MAX_SLIDES} photos</span></div>
     {flash(msg,msg_kind) if msg and query.get('slide_result') else ''}
-    <p class='slide-admin-warning'><strong>Storage:</strong> Without a persistent disk, a Render deploy or restart can erase slideshow changes and other data. Keep backups. Only publish photos when you have permission and any required consent, especially for minors. Removing a photo cannot recall copies already shared.</p>
+    <p class='slide-admin-warning'><strong>Storage:</strong> {e(storage_note)} Only publish photos when you have permission and any required consent, especially for minors. Removing a photo cannot recall copies already shared.</p>
     <form method='post' action='/admin/slideshow/add' enctype='multipart/form-data' class='builder-form slide-upload-form'><input type='hidden' name='csrf' value='{csrf}'><label>Choose a photo<input type='file' name='photo' accept='image/jpeg,image/png,image/webp' required><span class='form-hint'>JPEG, PNG or WebP · maximum 8 MB · metadata is removed.</span></label><label>Photo description <span class='optional'>(optional)</span><input type='text' name='caption' maxlength='160' placeholder='Describe this photo'><span class='form-hint'>Shown on the photo and used for accessibility.</span></label><button class='cta-primary slim' type='submit'>Add photo to slideshow</button></form>
     <div class='admin-slide-grid'>{slide_cards or '<p class="empty">No slideshow photos yet. Add one above to show the slideshow.</p>'}</div></div>
     <div class='dash-panel admin-form' id='add-opportunity'><h2>Add an opportunity manually</h2><form method='post' action='/admin/opportunity/add' class='builder-form'><input type='hidden' name='csrf' value='{csrf}'><div class='form-row'><label>Type<select name='type'><option>Scholarship</option><option>Internship</option><option>Competition</option><option>Grant</option><option>Hackathon</option><option>Opportunity</option></select></label><label>Deadline<input required name='deadline' placeholder='YYYY-MM-DD or See official page'></label></div><label>Title<input required name='title'></label><div class='form-row'><label>Provider<input required name='provider'></label><label>Country / region<input required name='country' value='Global'></label></div><label>Level<input required name='level' value='Students'></label><label>Application URL<input required type='url' name='url'></label><label>Summary<textarea required name='summary' rows='4'></textarea></label><label>Tags<input name='tags'></label><button class='cta-primary'>Post opportunity</button></form></div>
@@ -1541,11 +1585,19 @@ class ScholarHandler(BaseHTTPRequestHandler):
         match = re.fullmatch(r'user-(\d+)-[a-f0-9]+\.(?:jpg|jpeg|png|gif|webp)', rel, re.I)
         if not match or (int(match.group(1)) != user['id'] and not is_admin(user)):
             self.send_response(403); self.end_headers(); return
-        base = (UPLOAD_DIR / 'profiles').resolve(); target=(base / rel).resolve()
-        if not target.is_file() or target.parent != base:
-            self.send_response(404); self.end_headers(); return
-        data=target.read_bytes(); self.send_response(200)
-        self.send_header('Content-Type', mimetypes.guess_type(str(target))[0] or 'application/octet-stream')
+        with db() as conn:
+            photo=conn.execute('SELECT data,mime FROM media_objects WHERE storage_key=? AND owner_id=? AND project_id IS NULL',
+                               ('profiles/'+rel,int(match.group(1)))).fetchone()
+        if photo:
+            data=bytes(photo['data']); ctype=photo['mime']
+        else:
+            # Read-only fallback for pre-migration files, if the operator has moved them.
+            base = (UPLOAD_DIR / 'profiles').resolve(); target=(base / rel).resolve()
+            if not target.is_file() or target.parent != base:
+                self.send_response(404); self.end_headers(); return
+            data=target.read_bytes(); ctype=mimetypes.guess_type(str(target))[0] or 'application/octet-stream'
+        self.send_response(200)
+        self.send_header('Content-Type', ctype)
         self.send_header('Content-Length',str(len(data))); self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('Cache-Control','private, no-store'); self.end_headers(); self.wfile.write(data)
 
@@ -1556,16 +1608,22 @@ class ScholarHandler(BaseHTTPRequestHandler):
             asset=conn.execute('SELECT a.*,p.status,p.user_id owner_id FROM assets a JOIN projects p ON p.id=a.project_id WHERE a.id=?',(int(asset_id),)).fetchone()
         if not asset or (asset['status'] != 'public' and user['id'] != asset['owner_id'] and not is_admin(user)):
             self.send_response(403 if asset else 404); self.end_headers(); return
-        root=UPLOAD_DIR.resolve(); path=Path(asset['stored_path']).resolve()
-        if root not in path.parents or not path.is_file():
-            # Legacy rows contain an absolute location. If the operator moved the
-            # uploads directory to a persistent disk, resolve the generated flat
-            # filename inside that new directory without following external paths.
-            name=Path(asset['stored_path']).name
-            expected=rf"{asset['project_id']}-[a-f0-9]{{16}}-[A-Za-z0-9._-]+"
-            path=(root/name).resolve() if re.fullmatch(expected,name) else root
-        if root not in path.parents or not path.is_file(): self.send_response(404); self.end_headers(); return
-        data=path.read_bytes()
+        stored=asset['stored_path']
+        if stored.startswith('db:'):
+            with db() as conn:
+                media=conn.execute('SELECT data FROM media_objects WHERE storage_key=? AND owner_id=? AND project_id=?',
+                    (stored[3:],asset['owner_id'],asset['project_id'])).fetchone()
+            if not media: self.send_response(404); self.end_headers(); return
+            data=bytes(media['data'])
+        else:
+            root=UPLOAD_DIR.resolve(); path=Path(stored).resolve()
+            if root not in path.parents or not path.is_file():
+                # Legacy flat uploads can be moved to the configured upload directory.
+                name=Path(stored).name
+                expected=rf"{asset['project_id']}-[a-f0-9]{{16}}-[A-Za-z0-9._-]+"
+                path=(root/name).resolve() if re.fullmatch(expected,name) else root
+            if root not in path.parents or not path.is_file(): self.send_response(404); self.end_headers(); return
+            data=path.read_bytes()
         safe_mimes={'image/jpeg':'.jpg','image/png':'.png','image/gif':'.gif','image/webp':'.webp','video/mp4':'.mp4','video/webm':'.webm'}
         inline = bool(query.get('inline')) and asset['mime'] in safe_mimes
         ctype=asset['mime'] if inline else 'application/octet-stream'
@@ -1830,7 +1888,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
                 cur=conn.execute("""INSERT INTO users(name,email,password_hash,salt,role,email_verified,admin_approved,phone,created_at,account_type,career,education_level)
                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",(name,email,hashed,salt,'student',0,0,phone,now_iso(),account_type,career,education_level))
                 user_id=cur.lastrowid
-        except sqlite3.IntegrityError:
+        except DB_INTEGRITY_ERRORS:
             return self.send_html(render_auth('signup','That email already has an account.'),409)
         if EMAIL_ENABLED:
             try:
@@ -1900,13 +1958,14 @@ class ScholarHandler(BaseHTTPRequestHandler):
             return self.send_json({'ok':False,'error':'Choose a valid JPG, PNG, GIF or WebP image.'},400)
         if len(content) > 10 * 1024 * 1024:
             return self.send_json({"ok":False,"error":"Profile photo max is 10 MB"}, 400)
-        profile_dir=UPLOAD_DIR / "profiles"; profile_dir.mkdir(parents=True, exist_ok=True)
         ext=signatures[mime][1]
-        stored=profile_dir / f"user-{user['id']}-{secrets.token_hex(8)}{ext}"
-        stored.write_bytes(content)
-        url=f"/uploads/profiles/{stored.name}"
+        filename=f"user-{user['id']}-{secrets.token_hex(8)}{ext}"
+        key='profiles/'+filename; url='/uploads/profiles/'+filename
         with db() as conn:
+            conn.execute('INSERT INTO media_objects(storage_key,owner_id,project_id,mime,data,created_at) VALUES(?,?,NULL,?,?,?)',
+                         (key,user['id'],mime,content,now_iso()))
             conn.execute("UPDATE users SET profile_photo_url=? WHERE id=?", (url, user["id"]))
+            conn.execute("DELETE FROM media_objects WHERE owner_id=? AND project_id IS NULL AND storage_key<>?",(user['id'],key))
         return self.send_json({"ok":True,"url":url})
     def handle_project_save(self, user, form):
         title=form.get('title','').strip()[:160]; category=form.get('category','').strip()[:80]
@@ -2054,7 +2113,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         try:
             with db() as conn:
                 conn.execute("""INSERT INTO opportunities(type,title,provider,country,level,deadline,url,summary,tags,source,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)""", (fields["type"],fields["title"],fields["provider"],fields["country"],fields["level"],fields["deadline"],fields["url"],fields["summary"],fields["tags"],"Admin posted",now_iso()))
-        except sqlite3.IntegrityError:
+        except DB_INTEGRITY_ERRORS:
             return self.send_html(render_admin(user, "That opportunity title already exists."), 409)
         return self.send_html(render_admin(user, "Opportunity posted successfully."))
     def handle_admin_project_action(self, user, form):
@@ -2078,7 +2137,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
                         if cur.rowcount!=1: raise ValueError('Project changed during review; please review it again.')
                     else: conn.execute('UPDATE projects SET status=?,updated_at=? WHERE id=?',(status,now_iso(),int(pid)))
                     conn.execute('INSERT INTO moderation_logs(project_id,admin_id,action,note,created_at) VALUES(?,?,?,?,?)',(int(pid),user['id'],action,(form.get('note') or '')[:300],now_iso()))
-        except (sqlite3.IntegrityError,ValueError) as ex:
+        except (DB_INTEGRITY_ERRORS + (ValueError,)) as ex:
             return self.send_html(render_admin(user,f'Could not complete project action: {str(ex)[:120]}'),400)
         return self.send_html(render_admin(user,f'Project {action} action completed.'))
 
@@ -2122,7 +2181,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
                     conn.execute('DELETE FROM sessions WHERE user_id=?',(int(uid),)); message=f"Temporary password for {target['email']}: {temp}"
                 elif action=='delete':
                     conn.execute('DELETE FROM users WHERE id=?',(int(uid),)); message='User deleted.'
-        except sqlite3.IntegrityError:
+        except DB_INTEGRITY_ERRORS:
             return self.send_html(render_admin(user,'This user cannot be deleted while protected financial records remain.'),400)
         return self.send_html(render_admin(user,message))
 
@@ -2322,9 +2381,10 @@ class ScholarHandler(BaseHTTPRequestHandler):
         with db() as conn:
             project=conn.execute('SELECT id,status FROM projects WHERE id=? AND user_id=?',(pid,user['id'])).fetchone()
             if not project: return self.send_json({'ok':False,'error':'Project not found'},404)
-            stored=UPLOAD_DIR / f"{pid}-{secrets.token_hex(8)}-{filename}"
-            stored.write_bytes(content)
-            cur=conn.execute('INSERT INTO assets(user_id,project_id,filename,stored_path,external_url,mime,size,created_at) VALUES(?,?,?,?,?,?,?,?)',(user['id'],pid,filename,str(stored),'',mime,len(content),now_iso()))
+            key=f"assets/{pid}-{secrets.token_hex(8)}-{filename}"
+            conn.execute('INSERT INTO media_objects(storage_key,owner_id,project_id,mime,data,created_at) VALUES(?,?,?,?,?,?)',
+                         (key,user['id'],pid,mime,content,now_iso()))
+            cur=conn.execute('INSERT INTO assets(user_id,project_id,filename,stored_path,external_url,mime,size,created_at) VALUES(?,?,?,?,?,?,?,?)',(user['id'],pid,filename,'db:'+key,'',mime,len(content),now_iso()))
             status='pending_review' if project['status']=='public' else project['status']
             conn.execute('UPDATE projects SET asset_url=?,status=?,updated_at=?,review_version=review_version+1 WHERE id=?',(f'/download?id={cur.lastrowid}',status,now_iso(),pid))
         return self.send_json({'ok':True,'download_url':f'/download?id={cur.lastrowid}','filename':filename,'review_required':status=='pending_review'})
