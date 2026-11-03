@@ -72,9 +72,24 @@ class PrivateBucket:
                     raise StorageError('Storage response exceeded the allowed size.')
                 return payload
         except urllib.error.HTTPError as exc:
-            # Only the numeric status is retained, not the response body or URL.
+            # Retain only the numeric status and a tightly bounded provider code;
+            # never propagate response bodies, object URLs or credentials.
             error = StorageError('Storage service request failed.')
             error.status = exc.code
+            try:
+                body = json.loads(exc.read(16 * 1024))
+                if isinstance(body, dict):
+                    code = body.get('code', '')
+                    reason = body.get('error', '')
+                    provider_status = body.get('statusCode')
+                    if isinstance(code, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,64}', code):
+                        error.provider_code = code
+                    if isinstance(reason, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,64}', reason):
+                        error.provider_reason = reason
+                    if str(provider_status).isdigit() and 100 <= int(provider_status) <= 599:
+                        error.provider_status = int(provider_status)
+            except Exception:
+                pass
             raise error from None
         except StorageError:
             raise
@@ -107,8 +122,17 @@ class PrivateBucket:
         try:
             self._request('DELETE', path)
         except StorageError as exc:
-            if getattr(exc, 'status', None) != 404:
+            # Supabase's Storage API can report a missing object as HTTP 400
+            # with code NoSuchKey (confirmed against the actual project), not
+            # only as HTTP 404. Never confuse a missing bucket or permission
+            # failure with successful cleanup.
+            code = getattr(exc, 'provider_code', '')
+            missing = ((getattr(exc, 'status', None) == 404 and code in ('', 'NoSuchKey')) or
+                       (getattr(exc, 'status', None) == 400 and code == 'NoSuchKey' and
+                        getattr(exc, 'provider_status', None) == 404 and
+                        getattr(exc, 'provider_reason', '') == 'not_found'))
+            if not missing:
                 raise
-            # A missing object is an idempotent success only when the bucket
-            # still exists, is private, and this credential can inspect it.
+            # Idempotent success only if the same credential can still verify
+            # that the target bucket exists and is private.
             self.verify_private()

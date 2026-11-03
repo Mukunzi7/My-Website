@@ -6,6 +6,7 @@ import os
 import tempfile
 import threading
 import unittest
+import urllib.error
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
@@ -86,6 +87,31 @@ class PrivateBucketClientTests(unittest.TestCase):
         bucket._opener=FailingOpener()
         with self.assertRaises(private_storage.StorageError) as error:bucket.get('assets/1-a.pdf',1024)
         self.assertNotIn('sb_secret_dummy',str(error.exception))
+
+    def test_provider_missing_key_is_idempotent_but_other_errors_are_not(self):
+        bucket=private_storage.PrivateBucket('https://project123.supabase.co','sb_secret_dummy','70scholar-private')
+        class ErrorOpener:
+            def __init__(self, status, payload): self.status=status; self.payload=payload
+            def open(self, request, timeout):
+                raise urllib.error.HTTPError(request.full_url,self.status,'failure',{},io.BytesIO(json.dumps(self.payload).encode()))
+        missing={'statusCode':'404','error':'not_found','message':'Object not found','code':'NoSuchKey'}
+        bucket._opener=ErrorOpener(400,missing)
+        with mock.patch.object(bucket,'verify_private') as verify:
+            bucket.delete('slides/missing.jpg')
+            verify.assert_called_once()
+        for status, payload in [
+            (400,{'statusCode':'404','error':'Bucket not found','code':'NoSuchBucket'}),
+            (400,{'statusCode':'403','error':'not_found','code':'NoSuchKey'}),
+            (400,{'statusCode':'404','error':'AccessDenied','code':'NoSuchKey'}),
+            (403,missing), (404,{'code':'AccessDenied'})]:
+            with self.subTest(status=status,payload=payload):
+                bucket._opener=ErrorOpener(status,payload)
+                with mock.patch.object(bucket,'verify_private') as verify:
+                    with self.assertRaises(private_storage.StorageError): bucket.delete('slides/missing.jpg')
+                    verify.assert_not_called()
+        bucket._opener=ErrorOpener(400,missing)
+        with mock.patch.object(bucket,'verify_private',side_effect=private_storage.StorageError('not private')):
+            with self.assertRaises(private_storage.StorageError): bucket.delete('slides/missing.jpg')
 
     def test_render_requires_complete_verified_storage_configuration(self):
         with mock.patch.object(server, 'DATABASE_URL', 'postgresql://example.invalid/db'), \

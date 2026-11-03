@@ -118,7 +118,10 @@ after the move. Verify the migrated downloads as the owner before removing the o
   alone restores everything. Monitor usage and plan for growth.
 - Removed remote objects are queued for deletion and retried when Storage is available;
   errors do not make private files public. A previously created backup can still contain
-  deleted data. The real Supabase project and its RLS policies have not yet been tested.
+  deleted data. On 2026-11-03 the private bucket passed a synthetic upload, authenticated
+  download, anonymous/public denial and deletion test; no Storage object policies were
+  present then. Recheck before release. The real Render-to-PostgreSQL session-pooler
+  credentials, certificate path and deployed app flow have not yet been tested.
 - For a paid disk alternative, set `DB_PATH` and `UPLOAD_DIR` under the actual persistent
   disk mount after arranging a safe data migration. Set `PERSISTENT_DISK_MOUNT` if the
   mount is not `/var/data`.
@@ -133,8 +136,9 @@ owner's Seven Scholars emblem. The platform name remains 70Scholar. Sign in with
 and choose **Admin → Slideshow photos** to add or remove pictures. The first v19 startup
 imports the bundled slideshow into the database once; later owner removals are retained if
 that database survives. The 2026-11-02 public snapshot had 16 bundled photos and excluded
-`slide-07.jpg`; the fresh-database default matches that snapshot but must be rechecked
-immediately before cutover. New images are normalized and stored in the private bucket when
+`slide-07.jpg`. On 2026-11-03 the live site showed 17 defaults again, consistent with an
+ephemeral reset. The fresh-database default deliberately restores the earlier 16-photo
+owner selection; recheck for later changes immediately before cutover. New images are normalized and stored in the private bucket when
 configured; older imported image blobs remain in the database. Use PostgreSQL and the
 private bucket, or a persistent disk, together with independent backups; free Render SQLite
 alone can lose images and the chosen slideshow at any time. Permission and any required consent must
