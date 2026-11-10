@@ -29,6 +29,10 @@ PG_SCHEMA = 'scholar_data'
 ROOT = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("DB_PATH", str(ROOT / "edubridge.sqlite3")))
 STATIC_DIR = ROOT / "static"
+# This single public ownership-verification file is served at the website root.
+# Do not expose arbitrary repository files through this endpoint.
+GOOGLE_VERIFICATION_FILE = 'googleea85c8724f1d2440.html'
+GOOGLE_VERIFICATION_PATH = '/' + GOOGLE_VERIFICATION_FILE
 UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
@@ -75,7 +79,8 @@ TYPEWRITER_WORDS = [
 AUTO_SYNC_INTERVAL_SECONDS = 1800
 # Pages reachable without an account. Everything else requires sign-in.
 PUBLIC_GET_PATHS = {"/", "/login", "/signup", "/verify-email", "/forgot-password",
-                    "/reset-password", "/robots.txt", "/sitemap.xml", "/version", "/slide-image", "/favicon.ico"}
+                    "/reset-password", "/robots.txt", "/sitemap.xml", "/version", "/slide-image", "/favicon.ico",
+                    GOOGLE_VERIFICATION_PATH}
 PUBLIC_POST_PATHS = {"/login", "/signup", "/forgot-password", "/reset-password"}
 ACCOUNT_TYPES = ["Student", "Parent / Guardian", "Teacher / Mentor", "Employer / Organisation", "Other"]
 FEATURED_PROGRAMS = [
@@ -1668,6 +1673,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         except (TypeError, ValueError): return False
     def do_HEAD(self):
         parsed=urlparse(self.path); path=parsed.path
+        if path == GOOGLE_VERIFICATION_PATH: return self.serve_google_verification(head=True)
         if path == '/favicon.ico': return self.serve_static('/static/favicon.ico', head=True)
         if path.startswith('/static/'): return self.serve_static(path, head=True)
         if path == '/slide-image': return self.serve_slide_image(parse_qs(parsed.query), head=True)
@@ -1678,7 +1684,11 @@ class ScholarHandler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options','nosniff')
         self.end_headers()
     def do_GET(self):
-        parsed=urlparse(self.path); path=parsed.path; query=parse_qs(parsed.query); user=self.current_user()
+        parsed=urlparse(self.path); path=parsed.path; query=parse_qs(parsed.query)
+        # Verification is a public static file and should not depend on a session
+        # cookie or database availability.
+        if path == GOOGLE_VERIFICATION_PATH: return self.serve_google_verification()
+        user=self.current_user()
         if path == "/robots.txt": return self.send_plain("User-agent: *\nAllow: /\nSitemap: /sitemap.xml\n", "text/plain")
         if path == "/sitemap.xml": return self.send_plain(self.build_sitemap(), "application/xml")
         if path == "/version": return self.send_plain(f"70Scholar {APP_VERSION} - privacy, owner review and funding", "text/plain")
@@ -1720,6 +1730,18 @@ class ScholarHandler(BaseHTTPRequestHandler):
         if path == "/marketplace": return self.send_html(render_marketplace(user))
         if path == "/project": return self.send_html(render_project_detail(user, query.get("id", [""])[0]))
         return self.send_html(page_shell("Not found", "<section class='panel-section'><h1>Page not found</h1></section>", user), 404)
+    def serve_google_verification(self, head=False):
+        try:
+            data = (ROOT / GOOGLE_VERIFICATION_FILE).read_bytes()
+        except OSError:
+            self.send_response(404); self.end_headers(); return
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.end_headers()
+        if not head: self.wfile.write(data)
+
     def serve_static(self, path, head=False):
         target=(STATIC_DIR / path.removeprefix("/static/")).resolve()
         if STATIC_DIR.resolve() not in target.parents or not target.is_file(): self.send_response(404); self.end_headers(); return
