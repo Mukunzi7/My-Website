@@ -194,7 +194,7 @@ class ScholarTests(unittest.TestCase):
         sent=[]
         with mock.patch.object(server,'EMAIL_ENABLED',True),mock.patch.object(server,'send_email',side_effect=lambda email,subject,body,html_body=None:sent.append(body)):
             status,html,_=user.post('/account/verify-email',{'csrf':csrf})
-        self.assertEqual(status,200);self.assertIn('verification link was sent',html)
+        self.assertEqual(status,200);self.assertIn('verification link was requested',html)
         link=re.search(r'(/verify-email\?token=[^\s]+)',sent[0]).group(1)
         self.assertEqual(user.get(link)[0],200)
         self.assertEqual(self.db('SELECT email_verified FROM users WHERE id=?',(uid,),True)['email_verified'],1)

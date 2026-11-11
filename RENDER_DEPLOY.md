@@ -75,11 +75,15 @@ after the move. Verify the migrated downloads as the owner before removing the o
   `Admin123!` default is refused. If the owner account was bootstrapped without a suitable
   password, set this variable and restart; the locked account can then be initialized. Once
   a real password is in use, changing this variable alone does not overwrite that password.
-- `APP_BASE_URL=https://seven0scholar-7cjc.onrender.com` or the real custom HTTPS URL.
-- Configure either Bird (`BIRD_API_KEY`, verified-domain `BIRD_FROM`, optionally
-  `BIRD_REGION`) or SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`,
-  `SMTP_FROM`, `SMTP_TLS`) to deliver verification/reset emails. Bird's onboarding sender is
-  sandbox-restricted; see `BIRD_EMAIL_SETUP.md`.
+- Optionally set `APP_BASE_URL=https://seven0scholar-7cjc.onrender.com` or the real custom
+  HTTPS site-root URL. If unset, the app uses Render's `RENDER_EXTERNAL_URL`; it never derives
+  account links from a request Host. Clearly local, malformed or non-HTTPS link bases are
+  rejected on Render; this does not verify DNS, domain ownership or inbox delivery.
+- Configure Bird (`BIRD_API_KEY`, verified-domain `BIRD_FROM`, optionally `BIRD_REGION`) or
+  another supported email transport to deliver verification/reset emails. Bird's onboarding
+  sender is sandbox-restricted; see `BIRD_EMAIL_SETUP.md`. Render Free blocks outbound SMTP
+  ports 25, 465 and 587, so prefer an HTTPS email API. In the owner dashboard, **People →
+  Account email** reports non-secret setup categories and provides an owner-address test.
 - For Supabase: use the IPv4-compatible **session pooler** PostgreSQL URL in `DATABASE_URL`,
   privately in Render's environment settings (never in Git, chat or screenshots). Replace
   its password placeholder, URL-encoding special characters as necessary. Do not use the

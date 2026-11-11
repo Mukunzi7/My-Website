@@ -37,7 +37,7 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 APP_NAME = "70Scholar"
-APP_VERSION = "v22-bootcamps-verse"
+APP_VERSION = "v24-account-email"
 # A small, static collection avoids third-party requests on every page view.
 # Text is the public-domain World English Bible Protestant edition, as published
 # by eBible.org; each passage retains a link to the original chapter and verse.
@@ -130,7 +130,15 @@ EXAM_PREP = [
     {"title":"Scholarship aptitude tests","category":"Scholarship selection","level":"Varies","duration":"6 weeks","summary":"Quantitative and verbal reasoning practice common in scholarship screening tests.","topics":["Quantitative reasoning","Verbal reasoning","Essay writing","Interviews"]},
 ]
 
-APP_BASE_URL = os.environ.get("APP_BASE_URL", f"http://{HOST}:{PORT}").rstrip("/")
+def choose_app_base_url(env=None):
+    """Prefer the owner's URL, then Render's trusted public URL, never a request Host."""
+    env = os.environ if env is None else env
+    explicit = (env.get('APP_BASE_URL') or '').strip().rstrip('/')
+    render_url = (env.get('RENDER_EXTERNAL_URL') or '').strip().rstrip('/')
+    return explicit or render_url or f'http://{HOST}:{PORT}'
+
+
+APP_BASE_URL = choose_app_base_url()
 SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER", "")
@@ -149,6 +157,74 @@ MAIL_OUTBOX = ROOT / "mail_outbox.log"
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def is_public_https_url(value: str) -> bool:
+    """Reject obviously unsafe link bases without claiming to verify DNS or ownership."""
+    try:
+        if (not value or any(ord(c) < 32 or c.isspace() for c in value) or
+                '?' in value or '#' in value):
+            return False
+        parsed = urlparse(value)
+        host = (parsed.hostname or '').lower().rstrip('.')
+        # This app serves authentication routes at the site root. Accessing .port
+        # also rejects malformed and out-of-range ports before a link is sent.
+        port = parsed.port
+        if (parsed.scheme != 'https' or not host or parsed.username is not None or
+                parsed.password is not None or parsed.path not in ('', '/') or
+                parsed.netloc.endswith(':') or (port is not None and port < 1)):
+            return False
+        if host == 'localhost' or host.endswith(('.localhost', '.local', '.invalid', '.test')):
+            return False
+        try:
+            return ipaddress.ip_address(host).is_global
+        except ValueError:
+            # Do not mistake malformed numeric IPv4 addresses for public hostnames.
+            if re.fullmatch(r'[0-9.]+', host):
+                return False
+            ascii_host = host.encode('idna').decode('ascii')
+            labels = ascii_host.split('.')
+            return (len(ascii_host) <= 253 and len(labels) >= 2 and
+                    all(re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label)
+                        for label in labels))
+    except (TypeError, ValueError, UnicodeError):
+        return False
+
+
+def email_setup_diagnostics() -> dict:
+    """Return only non-secret configuration categories; this does not test delivery."""
+    provider, sender, region = 'none', 'none', 'not_applicable'
+    restricted_smtp_port = False
+    if BIRD_API_KEY:
+        provider = 'bird'
+        sender = ('sandbox' if BIRD_FROM.strip().lower() == 'onboarding@messagebird.dev'
+                  else 'custom' if BIRD_FROM.strip() else 'missing')
+        chosen = BIRD_REGION.strip().lower()
+        key_region = ('us1' if BIRD_API_KEY.startswith('bk_us1_') else
+                      'eu1' if BIRD_API_KEY.startswith('bk_eu1_') else '')
+        if chosen and chosen not in ('us1', 'eu1'):
+            region = 'invalid'
+        elif chosen and key_region and chosen != key_region:
+            region = 'mismatch'
+        else:
+            region = 'not_checked'
+    elif SMTP_HOST:
+        provider = 'smtp'
+        sender = ('missing' if not SMTP_FROM.strip() or SMTP_FROM.strip().lower().endswith('.local')
+                  else 'custom')
+        restricted_smtp_port = (os.environ.get('RENDER', '').lower() == 'true' and
+                                SMTP_PORT in (25, 465, 587))
+    return {'provider': provider, 'sender_mode': sender, 'bird_region': region,
+            'public_https_link': is_public_https_url(APP_BASE_URL),
+            'render_smtp_restricted_port': restricted_smtp_port,
+            'checked_at': now_iso()}
+
+
+def require_valid_email_link_base() -> None:
+    # Local development may use HTTP; real Render authentication links must not.
+    if os.environ.get('RENDER', '').lower() == 'true' and not is_public_https_url(APP_BASE_URL):
+        raise RuntimeError('A public HTTPS APP_BASE_URL is required for account emails.')
+
 
 def e(value: Any) -> str:
     return html.escape("" if value is None else str(value), quote=True)
@@ -381,6 +457,7 @@ def create_email_token(user_id: int, purpose: str, hours: int = 24) -> str:
 def send_verification_email(user_id: int, email: str, name: str) -> None:
     if not EMAIL_ENABLED:
         raise RuntimeError('Email delivery is not configured.')
+    require_valid_email_link_base()
     token = create_email_token(user_id, "verify_email", 48)
     link = f"{APP_BASE_URL}/verify-email?token={token}"
     text = f"Hi {name},\n\nWelcome to 70Scholar. Please verify your email address using this link:\n\n{link}\n\nIf you did not create this account, ignore this email.\n\n70Scholar"
@@ -388,6 +465,9 @@ def send_verification_email(user_id: int, email: str, name: str) -> None:
     send_email(email, "Verify your 70Scholar email", text, html_msg)
 
 def send_password_reset_email(user_id: int, email: str, name: str) -> None:
+    if not EMAIL_ENABLED:
+        raise RuntimeError('Email delivery is not configured.')
+    require_valid_email_link_base()
     token = create_email_token(user_id, "password_reset", 2)
     link = f"{APP_BASE_URL}/reset-password?token={token}"
     text = f"Hi {name},\n\nUse this link to reset your 70Scholar password. It expires in 2 hours:\n\n{link}\n\nIf you did not ask for this, ignore this email.\n\n70Scholar"
@@ -552,6 +632,11 @@ def init_db() -> None:
             conn.execute("INSERT INTO settings(key,value) VALUES('v19_slideshow_seeded',?)", (now_iso(),))
         conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('auto_sync','0')")
         conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('platform_fund','0')")
+        # Only fixed, non-secret categories are recorded for owner diagnostics.
+        # Credentials, addresses, tokens and URL values must never be stored here.
+        conn.execute("INSERT INTO settings(key,value) VALUES('system_email_setup_diagnostics_v1',?) "
+                     "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                     (json.dumps(email_setup_diagnostics(), sort_keys=True),))
         for src in RSS_SOURCES:
             conn.execute("INSERT OR IGNORE INTO feed_sources(url,added_at) VALUES(?,?)", (src, now_iso()))
         # Backfill auto-generated descriptions for seeded opportunities.
@@ -1198,6 +1283,17 @@ def render_submit(user, msg: str = "", kind: str = "success"):
     return page_shell("Submit an opportunity", body, user, "submit")
 
 
+def password_control(label: str, field_id: str, name: str, autocomplete: str,
+                     minimum: int = 0, placeholder: str = '', show_required: bool = False) -> str:
+    """A masked password field with an optional, progressively enhanced reveal button."""
+    minimum_attr = f' minlength="{minimum}"' if minimum else ''
+    placeholder_attr = f' placeholder="{e(placeholder)}"' if placeholder else ''
+    required_mark = " <span class='req'>*</span>" if show_required else ''
+    return (f'''<div class="password-control"><label for="{e(field_id)}">{e(label)}{required_mark}'''
+            f'''<input required type="password" id="{e(field_id)}" name="{e(name)}" autocomplete="{e(autocomplete)}"{minimum_attr}{placeholder_attr}></label>'''
+            f'''<button type="button" hidden class="password-toggle" data-password-toggle data-password-label="{e(label.lower())}" aria-controls="{e(field_id)}" aria-label="Show {e(label.lower())}">Show</button></div>''')
+
+
 def render_auth(mode: str, msg: str = "", next_url: str = ""):
     is_signup = mode == "signup"; title = "Create your account" if is_signup else "Log in"; action = "/signup" if is_signup else "/login"
     safe_next = next_url if next_url.startswith("/") and not next_url.startswith("//") else ""
@@ -1214,7 +1310,11 @@ def render_auth(mode: str, msg: str = "", next_url: str = ""):
         extra = ''
     switch = "Already have an account? <a href='/login'>Log in</a>." if is_signup else "New here? <a href='/signup'>Create an account</a>."
     forgot = "" if is_signup else "<p class='muted'><a href='/forgot-password'>Forgot password?</a></p>"
-    body = f"""<section class="auth-wrap"><form class="auth-card" method="post" action="{action}"><p class="eyebrow eyebrow-dark">Secure workspace</p><h1>{title}</h1>{flash(msg,'error') if msg else ''}{hidden_next}{extra}<label>Email <span class='req'>*</span><input required type="email" name="email" autocomplete="email" placeholder="you@example.com"></label><label>Password <span class='req'>*</span><input required type="password" name="password" autocomplete="{'new-password' if is_signup else 'current-password'}" minlength="8" placeholder="At least 8 characters"></label><button class="cta-primary auth-button" type="submit">{title}</button>{forgot}<p class="muted">{switch}</p></form></section>"""
+    email_hint = "<p class='form-hint'>Account verification uses email, not SMS. Check your inbox and spam folder for a verification link.</p>" if is_signup else ''
+    password = password_control('Password', 'signup-password' if is_signup else 'login-password', 'password',
+                                'new-password' if is_signup else 'current-password', 8,
+                                'At least 8 characters', show_required=True)
+    body = f"""<section class="auth-wrap"><form class="auth-card" method="post" action="{action}"><p class="eyebrow eyebrow-dark">Secure workspace</p><h1>{title}</h1>{flash(msg,'error') if msg else ''}{hidden_next}{extra}<label>Email <span class='req'>*</span><input required type="email" name="email" autocomplete="email" placeholder="you@example.com"></label>{email_hint}{password}<button class="cta-primary auth-button" type="submit">{title}</button>{forgot}<p class="muted">{switch}</p></form></section>"""
     return page_shell(title, body, None)
 
 def render_notice(title: str, message: str, user=None):
@@ -1226,7 +1326,8 @@ def render_forgot_password(msg: str = ""):
     return page_shell("Forgot password", body, None)
 
 def render_reset_password(token: str, msg: str = ""):
-    body = f"""<section class='auth-wrap'><form class='auth-card' method='post' action='/reset-password'><p class='eyebrow eyebrow-dark'>Account recovery</p><h1>Choose a new password</h1>{flash(msg,'error') if msg else ''}<input type='hidden' name='token' value='{e(token)}'><label>New password<input required type='password' minlength='8' name='password' autocomplete='new-password'></label><button class='cta-primary auth-button' type='submit'>Reset password</button></form></section>"""
+    password = password_control('New password', 'reset-password', 'password', 'new-password', 8)
+    body = f"""<section class='auth-wrap'><form class='auth-card' method='post' action='/reset-password'><p class='eyebrow eyebrow-dark'>Account recovery</p><h1>Choose a new password</h1>{flash(msg,'error') if msg else ''}<input type='hidden' name='token' value='{e(token)}'>{password}<button class='cta-primary auth-button' type='submit'>Reset password</button></form></section>"""
     return page_shell("Reset password", body, None)
 
 def render_account(user, msg=""):
@@ -1263,8 +1364,8 @@ def render_account(user, msg=""):
         <form method='post' action='/account/password' class='builder-form'>
           <input type='hidden' name='csrf' value='{e(user['csrf'])}'>
           <h2>Change password</h2>
-          <label>Current password<input required type='password' name='current_password' autocomplete='current-password'></label>
-          <label>New password<input required type='password' name='new_password' minlength='8' autocomplete='new-password'></label>
+          {password_control('Current password', 'account-current-password', 'current_password', 'current-password')}
+          {password_control('New password', 'account-new-password', 'new_password', 'new-password', 8)}
           <button class='cta-primary' type='submit'>Update password</button>
         </form>
       </div>
@@ -1474,6 +1575,39 @@ def sync_opportunities_from_feeds() -> tuple[int, str]:
                 messages.append(f"failed {source}: {ex}")
     return imported, "; ".join(messages)
 
+def render_email_setup_panel(csrf: str) -> str:
+    diag = email_setup_diagnostics()
+    if diag['provider'] == 'bird':
+        provider = 'Bird email API configured; delivery has not been verified.'
+        if diag['sender_mode'] == 'sandbox':
+            sender = "Bird's onboarding sender is restricted to sandbox addresses and verified workspace members. Public registrations need a verified sending domain."
+        elif diag['sender_mode'] == 'missing':
+            sender = 'The Bird sender is missing. Configure a sender on a verified domain.'
+        else:
+            sender = 'A custom Bird sender is configured. Check that its domain is verified in Bird.'
+    elif diag['provider'] == 'smtp':
+        provider = 'SMTP configured; delivery has not been verified.'
+        sender = ('A sender address is configured. Verify it with the email provider.' if diag['sender_mode'] == 'custom'
+                  else 'The sender address is missing or local-only; configure a valid sender.')
+    else:
+        provider = 'No email provider configured.'
+        sender = 'Set up a transactional email provider to send verification and password-reset links.'
+    warnings = []
+    if not diag['public_https_link']:
+        warnings.append('Account links do not have a public HTTPS address. Set APP_BASE_URL to the live site URL in Render.')
+    if diag['render_smtp_restricted_port']:
+        warnings.append('Render Free blocks SMTP ports 25, 465 and 587. Use an HTTPS email API or a supported alternative.')
+    if diag['bird_region'] in ('invalid', 'mismatch'):
+        warnings.append('The Bird region appears invalid or does not match the API key region.')
+    notes = ''.join(f"<li>{e(note)}</li>" for note in warnings)
+    return f"""<div class='dash-panel wide' id='email-delivery'><h2>Account email delivery</h2>
+      <p><strong>Provider:</strong> {e(provider)}</p><p><strong>Sender:</strong> {e(sender)}</p>
+      {f"<ul>{notes}</ul>" if notes else ''}
+      <p class='muted'>A provider accepting a request is not proof that it reached an inbox. Check spam and provider delivery events. This website sends verification links by email, not SMS.</p>
+      <form method='post' action='/admin/email/test'><input type='hidden' name='csrf' value='{e(csrf)}'><button class='ghost-button' type='submit'>Send test email to the owner</button></form>
+    </div>"""
+
+
 def render_admin(user, msg='', query=None, msg_kind='success'):
     query = query or {}
     if not msg:
@@ -1559,7 +1693,7 @@ def render_admin(user, msg='', query=None, msg_kind='success'):
     blocked_phrases=get_setting('message_blocked_phrases','')
     storage_note = ('Accounts use the database and new uploads use a private storage bucket. Keep independent backups; free plans have size and inactivity limits.' if CLOUD_STORAGE else ('Photos and account data use the configured database. Keep independent backups; free storage has size and inactivity limits.' if DATABASE_URL else 'Without a persistent disk, a Render deploy or restart can erase slideshow changes and other data. Keep backups.'))
     body=f"""<section class='page-hero compact admin-hero'><p class='eyebrow'>Admin command center</p><h1>Manage reviews, people and funding.</h1><p>Owner-only tools for {e(OWNER_ADMIN_EMAIL)}. Personal records below are private.</p></section>
-    <section class='admin-shell'><aside class='admin-sidebar'><p class='eyebrow eyebrow-dark'>Workspace</p><h2>Admin menu</h2><nav class='admin-nav' aria-label='Admin sections'><a href='#review'>① Review queue</a><a href='#content'>② Content</a><a href='#slideshow-settings' class='admin-nav-child'>↳ Slideshow photos</a><a href='#automation'>③ Automation</a><a href='#people'>④ People</a><a href='#safety'>⑤ Message safety</a><a href='#funding'>⑥ Funding</a></nav><p class='admin-sidebar-note'>Review project text, files and opportunity links before publication.</p></aside><div class='admin-main'><div class='stats-row'>{cards}</div>{flash(msg,msg_kind) if msg else ''}
+    <section class='admin-shell'><aside class='admin-sidebar'><p class='eyebrow eyebrow-dark'>Workspace</p><h2>Admin menu</h2><nav class='admin-nav' aria-label='Admin sections'><a href='#review'>① Review queue</a><a href='#content'>② Content</a><a href='#slideshow-settings' class='admin-nav-child'>↳ Slideshow photos</a><a href='#automation'>③ Automation</a><a href='#people'>④ People</a><a href='#email-delivery' class='admin-nav-child'>↳ Account email</a><a href='#safety'>⑤ Message safety</a><a href='#funding'>⑥ Funding</a></nav><p class='admin-sidebar-note'>Review project text, files and opportunity links before publication.</p></aside><div class='admin-main'><div class='stats-row'>{cards}</div>{flash(msg,msg_kind) if msg else ''}
     <h2 class='admin-group-title' id='review'>1 · Review queue</h2><div class='dash-panel wide' id='submissions'><h2>Community submissions</h2><p class='muted'>Submissions stay private until approved. Verify the original page and deadlines.</p><div class='mini-grid'>{sub_rows or '<p class="empty">No submissions waiting for review.</p>'}</div></div>
     <div class='dash-panel wide'><h2>Project moderation queue</h2><p class='muted'>Open every project, read its full text and inspect each attachment for identifying information. Automatic filters cannot inspect file contents. Reject material you cannot approve safely.</p><div class='mini-grid'>{pending_rows or '<p class="empty">No projects waiting for review.</p>'}</div></div>
     <h2 class='admin-group-title' id='content'>2 · Content &amp; catalogue</h2>
@@ -1573,6 +1707,7 @@ def render_admin(user, msg='', query=None, msg_kind='success'):
     <h2 class='admin-group-title' id='automation'>3 · Automation &amp; imports</h2><div class='dash-panel'><h2>Automatic opportunity posting</h2><p class='muted'>Imports from saved sources; verify deadlines. Auto-import is {'ON' if auto_on else 'OFF'}.</p><form method='post' action='/admin/auto-sync' class='table-form'><input type='hidden' name='csrf' value='{csrf}'><input type='hidden' name='enabled' value='{'0' if auto_on else '1'}'><button class='ghost-button'>Turn {'off' if auto_on else 'on'} auto-import</button></form><form method='post' action='/admin/sync' class='table-form'><input type='hidden' name='csrf' value='{csrf}'><button class='cta-primary slim'>Sync now</button></form><ul class='clean-list'>{log_rows or '<li>No syncs yet.</li>'}</ul></div>
     <div class='dash-panel'><h2>Auto-import &amp; source links</h2><form method='post' action='/admin/source/add' class='builder-form'><input type='hidden' name='csrf' value='{csrf}'><label>Add a feed or webpage link<input name='url' type='url' placeholder='https://example.com/feed' required></label><button class='cta-primary slim'>Save link</button></form><form method='post' action='/admin/source/fetch' class='builder-form'><input type='hidden' name='csrf' value='{csrf}'><label>Fetch a one-off link<input name='url' type='url' required></label><button class='ghost-button'>Fetch now</button></form><ul class='clean-list admin-source-list'>{source_rows or '<li>No saved sources.</li>'}</ul></div>
     <h2 class='admin-group-title' id='people'>4 · People &amp; records</h2><div class='dash-panel wide'><h2>User controls</h2><p class='muted'>Active = signed-in activity in the last 7 days. Email verification and a manual access grant are separate.</p><div class='user-pagination'>{user_pagination}</div><div class='table-wrap'><table><thead><tr><th>ID</th><th>Name</th><th>Private email / phone</th><th>Email proof</th><th>Access</th><th>Last active</th><th>Role</th><th>Actions</th></tr></thead><tbody>{user_rows}</tbody></table></div></div>
+    {render_email_setup_panel(user['csrf'])}
     <div class='dash-panel wide'><h2>Recent projects</h2><div class='table-wrap'><table><thead><tr><th>ID</th><th>Title</th><th>Owner</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead><tbody>{project_rows}</tbody></table></div></div>
     <h2 class='admin-group-title' id='safety'>5 · Message safety</h2><div class='dash-panel wide'><h2>Message rules and detection</h2><p>Built-in checks prohibit contact details, names, off-platform payments, threats and harassment. Violations are suppressed and accounts automatically blocked; the owner account is exempt from blocking. Filters may miss disguised information or flag innocent wording. Review before unblocking.</p><form method='post' action='/admin/message/settings' class='builder-form'><input type='hidden' name='csrf' value='{csrf}'><label>Extra blocked phrases · one per line<textarea name='blocked_phrases' rows='4' maxlength='8000'>{e(blocked_phrases)}</textarea></label><button class='cta-primary slim'>Save phrases</button></form></div>
     <div class='dash-panel wide'><h2>Flagged messages · owner only</h2><p class='muted'>Raw flagged text is visible only here. Mark reviewed, then use User controls to unblock if appropriate.</p><div class='mini-grid'>{incident_rows or '<p class="empty">No open flags.</p>'}</div></div>
@@ -1884,9 +2019,9 @@ class ScholarHandler(BaseHTTPRequestHandler):
             if user['email_verified']: return self.send_html(render_account(user,'Your email is already verified.'))
             try:
                 send_verification_email(user['id'],user['email'],user['name'])
-                return self.send_html(render_account(user,'A verification link was sent. Check your inbox.'))
-            except Exception as ex:
-                print('Verification email failed:',ex,file=sys.stderr)
+                return self.send_html(render_account(user,'A verification link was requested. Check your inbox and spam folder.'))
+            except Exception:
+                print('Verification email request failed.',file=sys.stderr)
                 return self.send_html(render_account(user,'Email delivery is unavailable. Your email remains unverified; please try again later.'),503)
         if path == "/account/name":
             form=self.read_form();
@@ -1921,6 +2056,11 @@ class ScholarHandler(BaseHTTPRequestHandler):
             if not user: return self.redirect("/login")
             if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "<section class='panel-section'>CSRF check failed.</section>", user), 403)
             return self.handle_project_save(user, form)
+        if path == "/admin/email/test":
+            if not is_admin(user): return self.send_html(page_shell("Forbidden", "<section class='panel-section'>Owner admin only.</section>", user), 403)
+            form = self.read_form()
+            if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "<section class='panel-section'>CSRF check failed.</section>", user), 403)
+            return self.handle_admin_email_test(user)
         if path == "/admin/slideshow/add":
             if not is_admin(user): return self.send_html(page_shell("Forbidden", "<section class='panel-section'>Owner admin only.</section>", user), 403)
             return self.run_bounded_upload(self.handle_admin_slide_add, user, api=False)
@@ -2057,8 +2197,8 @@ class ScholarHandler(BaseHTTPRequestHandler):
             user=conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
         if user and EMAIL_ENABLED:
             try: send_password_reset_email(user['id'],user['email'],user['name'])
-            except Exception as ex: print('Password reset email failed:',ex,file=sys.stderr)
-        return self.send_html(render_forgot_password("If that account exists and email delivery is available, a reset link has been sent."))
+            except Exception: print('Password reset email request failed.',file=sys.stderr)
+        return self.send_html(render_forgot_password("If that account exists and email delivery is available, a reset link has been requested. Check your inbox and spam folder."))
     def handle_reset_password(self, form):
         token=form.get("token",""); password=form.get("password","")
         if len(password)<8: return self.send_html(render_reset_password(token, "Password must be at least 8 characters."), 400)
@@ -2101,10 +2241,10 @@ class ScholarHandler(BaseHTTPRequestHandler):
         if EMAIL_ENABLED:
             try:
                 send_verification_email(user_id,email,name)
-                return self.send_html(render_notice('Check your email','Your account was created. Verify your email to sign in, or ask the owner to grant access.'))
-            except Exception as ex:
-                print('Verification delivery failed; account remains unverified:',ex,file=sys.stderr)
-        return self.send_html(render_notice('Account awaiting access','Your account was created but email verification is unavailable. Ask the owner admin to grant access, or try again when email delivery is configured.'))
+                return self.send_html(render_notice('Check your email','Your account was created and a verification email was requested. Check your inbox and spam folder, then open the link. If it does not arrive, ask the owner to grant access.'))
+            except Exception:
+                print('Verification delivery failed; account remains unverified.',file=sys.stderr)
+        return self.send_html(render_notice('Account awaiting access','Your account was created, but a verification email could not be sent. Your account is not yet verified. Ask the owner to grant access, or try signing in later for a new link.'))
 
     def handle_login(self, form):
         email=form.get('email','').strip().lower(); password=form.get('password','')
@@ -2117,8 +2257,8 @@ class ScholarHandler(BaseHTTPRequestHandler):
             sent=False
             if EMAIL_ENABLED:
                 try: send_verification_email(user['id'],user['email'],user['name']); sent=True
-                except Exception as ex: print('Verification email failed:',ex,file=sys.stderr)
-            msg = ('Please verify your email. A new link was sent, or the owner can grant access.' if sent else
+                except Exception: print('Verification email request failed.',file=sys.stderr)
+            msg = ('Please verify your email. A new link was requested; check your inbox and spam, or ask the owner to grant access.' if sent else
                    'Please verify your email or ask the owner to grant access. Email delivery is currently unavailable.')
             return self.send_html(render_auth('login',msg),403)
         nxt=(form.get('next') or '').strip()
@@ -2496,6 +2636,40 @@ class ScholarHandler(BaseHTTPRequestHandler):
                 message="Submission rejected."
         # Do not send a success response or render stale admin data until the write commits.
         return self.send_html(render_admin(user, message))
+
+    def handle_admin_email_test(self, user):
+        """The owner can test the configured transport only to the owner's own mailbox."""
+        result = {'status': 'not_configured', 'checked_at': now_iso()}
+        if not EMAIL_ENABLED:
+            message = 'No email provider is configured. Set up an email API and verified sender in Render.'
+            kind = 'error'
+        else:
+            try:
+                send_email(OWNER_ADMIN_EMAIL, '70Scholar account email test',
+                           'This is a test email requested from the 70Scholar owner dashboard. '
+                           'If you received it, the provider delivered this test to your inbox. '
+                           'Verification emails to other recipients may still require a verified sending domain.')
+                result['status'] = 'provider_accepted'
+                message = ('The email provider accepted the test request. Check your owner inbox and spam folder. '
+                           'Acceptance does not guarantee delivery or show whether the sending domain is verified.')
+                kind = 'success'
+            except urllib.error.HTTPError as ex:
+                code = int(ex.code) if isinstance(ex.code, int) else 0
+                result.update(status='provider_rejected', http_status=code)
+                message = (f'The email provider rejected the test (HTTP {code}). '
+                           'Check the provider key, region, verified sender and provider delivery logs.')
+                kind = 'error'
+            except Exception:
+                result['status'] = 'failed'
+                message = ('The test could not be sent. Check the email provider configuration, '
+                           'network access and Render logs; no password or key should be shared in chat.')
+                kind = 'error'
+        try:
+            # No recipient, message, credentials, token, URL or raw exception is stored.
+            set_setting('system_email_last_test_v1', json.dumps(result, sort_keys=True))
+        except Exception:
+            print('Email-test status could not be recorded.', file=sys.stderr)
+        return self.send_html(render_admin(user, message, msg_kind=kind))
 
     def handle_admin_delete_opportunity(self, user, form):
         oid=form.get("opportunity_id","")

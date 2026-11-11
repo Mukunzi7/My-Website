@@ -1,10 +1,18 @@
 # Account verification and access
 
-Name, email, phone and password are required at signup. Phone and other account details are
-visible to the account holder and owner admin, not in public project/message views. Configure
-Bird or SMTP and `APP_BASE_URL` to send a verification link. Email is marked verified only
-after a valid, unexpired token is consumed. If the provider is missing, rejects a message or
-fails, the account remains unverified and cannot sign in unless the owner grants access.
+Name, email and password are required at signup; phone and other profile fields are optional.
+Contact details are visible to the account holder and owner admin, not in public project/message
+views. Configure Bird or another working email transport to send a verification link. On Render,
+`APP_BASE_URL` takes precedence; if unset, `RENDER_EXTERNAL_URL` supplies the public site URL.
+Account links must use a public HTTPS address on Render. Email is marked verified only after a
+valid, unexpired token is consumed. If the provider is missing, rejects a message or fails,
+the account remains unverified and cannot sign in unless the owner grants access.
+
+The owner-only Admin → People → Account email panel shows non-secret setup categories and can
+send a test to the owner's own email address. A provider's acceptance is not proof of inbox
+delivery: check spam and the provider's delivery events. Bird's shared onboarding sender is
+restricted to sandbox addresses and verified workspace members. Render Free blocks outbound
+SMTP ports 25, 465 and 587; an HTTPS email API is usually the practical option.
 
 Admin → People → **Grant access** sets a separate `admin_approved` flag; it does not mark the
 email verified. A granted user can request a verification link later from Account settings. The owner can revoke that grant, block/unblock accounts, or reset passwords.

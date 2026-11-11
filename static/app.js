@@ -10,6 +10,25 @@
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
 
+  /* Passwords stay masked by default. Each button only changes its own field;
+     the value is never copied, logged, or sent anywhere by this control. */
+  $$('[data-password-toggle]').forEach(function (button) {
+    var input = document.getElementById(button.getAttribute('aria-controls'));
+    if (!input || input.type !== 'password') return;
+    button.addEventListener('click', function () {
+      var show = input.type === 'password';
+      var start = input.selectionStart, end = input.selectionEnd;
+      input.type = show ? 'text' : 'password';
+      button.textContent = show ? 'Hide' : 'Show';
+      button.setAttribute('aria-label', (show ? 'Hide ' : 'Show ') + (button.getAttribute('data-password-label') || 'password'));
+      input.focus();
+      if (start !== null && end !== null && input.setSelectionRange) {
+        try { input.setSelectionRange(start, end); } catch (err) { /* Some browsers do not support selection. */ }
+      }
+    });
+    button.hidden = false;
+  });
+
   function readAsDataURL(file) {
     return new Promise(function (resolve, reject) {
       var reader = new FileReader();
