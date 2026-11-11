@@ -24,8 +24,8 @@ from http.server import ThreadingHTTPServer
 ROOT=Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 os.environ['ADMIN_PASSWORD']='TestOwnerPassword123!'
-os.environ.pop('BIRD_API_KEY',None)
-os.environ.pop('SMTP_HOST',None)
+for key in ('EMAIL_PROVIDER', 'BREVO_API_KEY', 'BREVO_FROM', 'BIRD_API_KEY', 'SMTP_HOST'):
+    os.environ.pop(key, None)
 import server
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):

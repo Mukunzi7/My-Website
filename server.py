@@ -37,7 +37,7 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 APP_NAME = "70Scholar"
-APP_VERSION = "v25-competitions"
+APP_VERSION = "v26-brevo-account-email"
 # A small, static collection avoids third-party requests on every page view.
 # Text is the public-domain World English Bible Protestant edition, as published
 # by eBible.org; each passage retains a link to the original chapter and verse.
@@ -81,7 +81,7 @@ AUTO_SYNC_INTERVAL_SECONDS = 1800
 PUBLIC_GET_PATHS = {"/", "/login", "/signup", "/verify-email", "/forgot-password",
                     "/reset-password", "/robots.txt", "/sitemap.xml", "/version", "/slide-image", "/favicon.ico",
                     GOOGLE_VERIFICATION_PATH}
-PUBLIC_POST_PATHS = {"/login", "/signup", "/forgot-password", "/reset-password"}
+PUBLIC_POST_PATHS = {"/login", "/signup", "/verify-email", "/forgot-password", "/reset-password"}
 ACCOUNT_TYPES = ["Student", "Parent / Guardian", "Teacher / Mentor", "Employer / Organisation", "Other"]
 FEATURED_PROGRAMS = [
  {"title":"Yale Young African Scholars (YYAS) 2027","type":"Summer program","provider":"Yale University","country":"Africa / online + Rwanda","level":"African secondary students aged 14-18 in grades 10-11","deadline":"2027-01-20","url":"https://africanscholars.yale.edu/admissions","summary":"Tuition-free university prep and leadership programme for African secondary school students. Includes a 6-day online college-prep workshop and a 9-day residential leadership summit in Rwanda.","tags":"YYAS, Yale, Africa, Rwanda, leadership, free"},
@@ -145,14 +145,43 @@ SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "noreply@70scholar.local")
 SMTP_TLS = os.environ.get("SMTP_TLS", "1") != "0"
-# Bird / MessageBird email API. Keep the API key in environment variables, never in code.
+# Keep email API keys in private environment variables, never in code or logs.
 BIRD_API_KEY = os.environ.get("BIRD_API_KEY", "")
 BIRD_FROM = os.environ.get("BIRD_FROM", "onboarding@messagebird.dev")
 BIRD_REGION = os.environ.get("BIRD_REGION", "")
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "").strip()
+BREVO_FROM = os.environ.get("BREVO_FROM", "").strip()
+# Explicit selection is required for Brevo. An unset selector preserves the
+# existing Bird-then-SMTP behavior. A bad or incomplete choice fails closed.
+EMAIL_PROVIDER = os.environ.get("EMAIL_PROVIDER", "").strip().lower()
 HELPLINE_PHONE = os.environ.get("HELPLINE_PHONE", "+250 783 958 599").strip()
 HELPLINE_EMAIL = os.environ.get("HELPLINE_EMAIL", "honoremukunzi6@gmail.com").strip()
+
+
+def selected_email_provider() -> str:
+    if EMAIL_PROVIDER:
+        return EMAIL_PROVIDER if EMAIL_PROVIDER in ('brevo', 'bird', 'smtp') else 'invalid'
+    if BIRD_API_KEY:
+        return 'bird'
+    if SMTP_HOST:
+        return 'smtp'
+    return 'none'
+
+
+def email_configuration_ready() -> bool:
+    provider = selected_email_provider()
+    if provider == 'brevo':
+        return bool(BREVO_API_KEY and BREVO_FROM)
+    if provider == 'bird':
+        return bool(BIRD_API_KEY)
+    if provider == 'smtp':
+        return bool(SMTP_HOST)
+    return False
+
+
 # Accounts require actual email verification or an explicit owner access grant.
-EMAIL_ENABLED = bool(BIRD_API_KEY or SMTP_HOST)
+# Environment variables are loaded once at startup; changes require a restart.
+EMAIL_ENABLED = email_configuration_ready()
 MAIL_OUTBOX = ROOT / "mail_outbox.log"
 
 def now_iso() -> str:
@@ -193,10 +222,11 @@ def is_public_https_url(value: str) -> bool:
 
 def email_setup_diagnostics() -> dict:
     """Return only non-secret configuration categories; this does not test delivery."""
-    provider, sender, region = 'none', 'none', 'not_applicable'
+    provider, sender, region = selected_email_provider(), 'none', 'not_applicable'
     restricted_smtp_port = False
-    if BIRD_API_KEY:
-        provider = 'bird'
+    if provider == 'brevo':
+        sender = 'custom' if BREVO_FROM else 'missing'
+    elif provider == 'bird':
         sender = ('sandbox' if BIRD_FROM.strip().lower() == 'onboarding@messagebird.dev'
                   else 'custom' if BIRD_FROM.strip() else 'missing')
         chosen = BIRD_REGION.strip().lower()
@@ -208,13 +238,13 @@ def email_setup_diagnostics() -> dict:
             region = 'mismatch'
         else:
             region = 'not_checked'
-    elif SMTP_HOST:
-        provider = 'smtp'
+    elif provider == 'smtp':
         sender = ('missing' if not SMTP_FROM.strip() or SMTP_FROM.strip().lower().endswith('.local')
                   else 'custom')
         restricted_smtp_port = (os.environ.get('RENDER', '').lower() == 'true' and
                                 SMTP_PORT in (25, 465, 587))
     return {'provider': provider, 'sender_mode': sender, 'bird_region': region,
+            'configuration_ready': email_configuration_ready(),
             'public_https_link': is_public_https_url(APP_BASE_URL),
             'render_smtp_restricted_port': restricted_smtp_port,
             'checked_at': now_iso()}
@@ -403,9 +433,41 @@ def bird_api_host() -> str:
         raise ValueError('BIRD_REGION must be us1 or eu1.')
     return f"https://{region}.platform.bird.com/v1/email/messages"
 
+class _NoEmailApiRedirect(urllib.request.HTTPRedirectHandler):
+    """Never forward an email API credential to a redirected host."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def send_email(to_email: str, subject: str, body: str, html_body: str | None = None) -> None:
-    """Send email through Bird or SMTP; never treat a local log as delivery."""
-    if BIRD_API_KEY:
+    """Submit to exactly one configured provider; acceptance is not inbox delivery."""
+    provider = selected_email_provider()
+    if not email_configuration_ready():
+        raise RuntimeError('Selected email provider is not configured.')
+    if provider == 'brevo':
+        payload = {
+            'sender': {'name': '70Scholar', 'email': BREVO_FROM},
+            'replyTo': {'email': BREVO_FROM},
+            'to': [{'email': to_email}],
+            'subject': subject,
+            'textContent': body,
+            # Brevo documents htmlContent as required for non-template sends.
+            'htmlContent': html_body or '<p>' + e(body).replace('\n', '<br>') + '</p>',
+        }
+        req = urllib.request.Request(
+            'https://api.brevo.com/v3/smtp/email',
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'api-key': BREVO_API_KEY, 'Content-Type': 'application/json',
+                     'Accept': 'application/json'},
+            method='POST',
+        )
+        opener = urllib.request.build_opener(_NoEmailApiRedirect())
+        with opener.open(req, timeout=15) as resp:
+            # Brevo's 201 means accepted, not necessarily delivered.
+            if resp.status not in (200, 201, 202):
+                raise RuntimeError(f'Brevo email API returned status {resp.status}')
+        return
+    if provider == 'bird':
         payload = {
             "from": BIRD_FROM,
             "to": [to_email],
@@ -429,7 +491,7 @@ def send_email(to_email: str, subject: str, body: str, html_body: str | None = N
             if resp.status not in (200, 201, 202):
                 raise RuntimeError(f"Bird email API returned status {resp.status}")
         return
-    if SMTP_HOST:
+    if provider == 'smtp':
         msg = EmailMessage()
         msg["From"] = SMTP_FROM
         msg["To"] = to_email
@@ -446,33 +508,73 @@ def send_email(to_email: str, subject: str, body: str, html_body: str | None = N
     else:
         raise RuntimeError('Email delivery is not configured.')
 
-def create_email_token(user_id: int, purpose: str, hours: int = 24) -> str:
-    token = secrets.token_urlsafe(36)
+def create_email_token(user_id: int, purpose: str, hours: int = 24, *, as_code: bool = False) -> str:
+    # Brevo codes have 128 bits of randomness. Their hash, not the code, is stored.
+    # Existing long URL tokens remain valid and retain their previous format.
+    token = secrets.token_hex(16).upper() if as_code else secrets.token_urlsafe(36)
     expires = datetime.now(timezone.utc) + timedelta(hours=hours)
     with db() as conn:
         conn.execute("DELETE FROM email_tokens WHERE user_id=? AND purpose=?", (user_id, purpose))
         conn.execute("INSERT INTO email_tokens(user_id,token_hash,purpose,created_at,expires_at) VALUES(?,?,?,?,?)", (user_id, token_hash(token), purpose, now_iso(), expires.isoformat(timespec="seconds")))
     return token
 
+
+def normalize_email_code(value: str) -> str:
+    # Allow a pasted or typed, grouped code without weakening its 128-bit secret.
+    if not isinstance(value, str) or len(value) > 100:
+        return ''
+    normalized = re.sub(r'[\s-]+', '', value).upper()
+    return normalized if re.fullmatch(r'[0-9A-F]{32}', normalized) else ''
+
+
+def display_email_code(value: str) -> str:
+    return '-'.join(value[i:i + 4] for i in range(0, len(value), 4))
+
+
 def send_verification_email(user_id: int, email: str, name: str) -> None:
     if not EMAIL_ENABLED:
         raise RuntimeError('Email delivery is not configured.')
     require_valid_email_link_base()
-    token = create_email_token(user_id, "verify_email", 48)
-    link = f"{APP_BASE_URL}/verify-email?token={token}"
-    text = f"Hi {name},\n\nWelcome to 70Scholar. Please verify your email address using this link:\n\n{link}\n\nIf you did not create this account, ignore this email.\n\n70Scholar"
-    html_msg = f"<p>Hi {e(name)},</p><p>Welcome to 70Scholar. Please verify your email address:</p><p><a href='{e(link)}'>Verify my email</a></p><p>If you did not create this account, ignore this email.</p><p>70Scholar</p>"
-    send_email(email, "Verify your 70Scholar email", text, html_msg)
+    if selected_email_provider() == 'brevo':
+        code = display_email_code(create_email_token(user_id, 'verify_email', 48, as_code=True))
+        page = f'{APP_BASE_URL}/verify-email'
+        # A tracked Brevo URL must not contain the bearer secret. The provider
+        # still receives the message body, including the code, to deliver it.
+        text = (f'Hi {name},\n\nWelcome to 70Scholar. Your email verification code is:\n\n{code}\n\n'
+                f'Open {page} and enter the code. It expires in 48 hours. '
+                'Do not share your code. If you did not create this account, ignore this email.\n\n70Scholar')
+        html_msg = (f'<p>Hi {e(name)},</p><p>Welcome to 70Scholar. Your email verification code is:</p>'
+                    f'<p><strong>{e(code)}</strong></p><p><a href="{e(page)}">Open 70Scholar verification</a> '
+                    'and enter the code. It expires in 48 hours. Do not share your code.</p>'
+                    '<p>If you did not create this account, ignore this email.</p><p>70Scholar</p>')
+    else:
+        token = create_email_token(user_id, 'verify_email', 48)
+        link = f'{APP_BASE_URL}/verify-email?token={token}'
+        text = f'Hi {name},\n\nWelcome to 70Scholar. Please verify your email address using this link:\n\n{link}\n\nIf you did not create this account, ignore this email.\n\n70Scholar'
+        html_msg = f"<p>Hi {e(name)},</p><p>Welcome to 70Scholar. Please verify your email address:</p><p><a href='{e(link)}'>Verify my email</a></p><p>If you did not create this account, ignore this email.</p><p>70Scholar</p>"
+    send_email(email, 'Verify your 70Scholar email', text, html_msg)
+
 
 def send_password_reset_email(user_id: int, email: str, name: str) -> None:
     if not EMAIL_ENABLED:
         raise RuntimeError('Email delivery is not configured.')
     require_valid_email_link_base()
-    token = create_email_token(user_id, "password_reset", 2)
-    link = f"{APP_BASE_URL}/reset-password?token={token}"
-    text = f"Hi {name},\n\nUse this link to reset your 70Scholar password. It expires in 2 hours:\n\n{link}\n\nIf you did not ask for this, ignore this email.\n\n70Scholar"
-    html_msg = f"<p>Hi {e(name)},</p><p>Use this link to reset your 70Scholar password. It expires in 2 hours:</p><p><a href='{e(link)}'>Reset my password</a></p><p>If you did not ask for this, ignore this email.</p><p>70Scholar</p>"
-    send_email(email, "Reset your 70Scholar password", text, html_msg)
+    if selected_email_provider() == 'brevo':
+        code = display_email_code(create_email_token(user_id, 'password_reset', 2, as_code=True))
+        page = f'{APP_BASE_URL}/reset-password'
+        text = (f'Hi {name},\n\nYour 70Scholar password reset code is:\n\n{code}\n\n'
+                f'Open {page} and enter the code. It expires in 2 hours. '
+                'Do not share your code. If you did not request a reset, ignore this email.\n\n70Scholar')
+        html_msg = (f'<p>Hi {e(name)},</p><p>Your 70Scholar password reset code is:</p>'
+                    f'<p><strong>{e(code)}</strong></p><p><a href="{e(page)}">Open 70Scholar password reset</a> '
+                    'and enter the code. It expires in 2 hours. Do not share your code.</p>'
+                    '<p>If you did not request a reset, ignore this email.</p><p>70Scholar</p>')
+    else:
+        token = create_email_token(user_id, 'password_reset', 2)
+        link = f'{APP_BASE_URL}/reset-password?token={token}'
+        text = f'Hi {name},\n\nUse this link to reset your 70Scholar password. It expires in 2 hours:\n\n{link}\n\nIf you did not ask for this, ignore this email.\n\n70Scholar'
+        html_msg = f"<p>Hi {e(name)},</p><p>Use this link to reset your 70Scholar password. It expires in 2 hours:</p><p><a href='{e(link)}'>Reset my password</a></p><p>If you did not ask for this, ignore this email.</p><p>70Scholar</p>"
+    send_email(email, 'Reset your 70Scholar password', text, html_msg)
 
 def init_db() -> None:
     if os.environ.get('RENDER', '').lower() == 'true' and not DATABASE_URL:
@@ -1311,7 +1413,12 @@ def render_auth(mode: str, msg: str = "", next_url: str = ""):
         extra = ''
     switch = "Already have an account? <a href='/login'>Log in</a>." if is_signup else "New here? <a href='/signup'>Create an account</a>."
     forgot = "" if is_signup else "<p class='muted'><a href='/forgot-password'>Forgot password?</a></p>"
-    email_hint = "<p class='form-hint'>Account verification uses email, not SMS. Check your inbox and spam folder for a verification link.</p>" if is_signup else ''
+    email_hint = ''
+    if is_signup:
+        proof = 'verification code' if selected_email_provider() == 'brevo' else 'verification link'
+        email_hint = f"<p class='form-hint'>Account verification uses email, not SMS. Check your inbox and spam folder for a {proof}.</p>"
+        if selected_email_provider() == 'brevo':
+            email_hint += "<p class='form-hint'>Brevo delivers account emails and may track email opens and clicks. Never share your code.</p>"
     password = password_control('Password', 'signup-password' if is_signup else 'login-password', 'password',
                                 'new-password' if is_signup else 'current-password', 8,
                                 'At least 8 characters', show_required=True)
@@ -1322,18 +1429,28 @@ def render_notice(title: str, message: str, user=None):
     body = f"""<section class='auth-wrap'><div class='auth-card'><p class='eyebrow eyebrow-dark'>70Scholar</p><h1>{e(title)}</h1><p>{e(message)}</p><div class='form-actions'><a class='cta-primary' href='/login'>Log in</a><a class='ghost-button' href='/'>Home</a></div></div></section>"""
     return page_shell(title, body, user)
 
+def render_verify_email(msg: str = ''):
+    body = f"""<section class='auth-wrap'><form class='auth-card' method='post' action='/verify-email'><p class='eyebrow eyebrow-dark'>Account verification</p><h1>Verify your email</h1>{flash(msg,'error') if msg else ''}<p class='muted'>Paste the verification code from your 70Scholar email. Do not share it.</p><label>Verification code<input required name='code' type='text' maxlength='100' autocomplete='one-time-code' autocapitalize='characters' spellcheck='false'></label><button class='cta-primary auth-button' type='submit'>Verify email</button><p class='muted'><a href='/login'>Back to login</a></p></form></section>"""
+    return page_shell('Verify email', body, None)
+
+
 def render_forgot_password(msg: str = ""):
-    body = f"""<section class='auth-wrap'><form class='auth-card' method='post' action='/forgot-password'><p class='eyebrow eyebrow-dark'>Account recovery</p><h1>Reset your password</h1>{flash(msg,'success') if msg else ''}<p class='muted'>Enter your account email. We will send a reset link.</p><label>Email<input required type='email' name='email' autocomplete='email'></label><button class='cta-primary auth-button' type='submit'>Send reset link</button><p class='muted'><a href='/login'>Back to login</a></p></form></section>"""
+    proof = 'code' if selected_email_provider() == 'brevo' else 'link'
+    body = f"""<section class='auth-wrap'><form class='auth-card' method='post' action='/forgot-password'><p class='eyebrow eyebrow-dark'>Account recovery</p><h1>Reset your password</h1>{flash(msg,'success') if msg else ''}<p class='muted'>Enter your account email. We will send a reset {proof}.</p><label>Email<input required type='email' name='email' autocomplete='email'></label><button class='cta-primary auth-button' type='submit'>Send reset {proof}</button><p class='muted'><a href='/login'>Back to login</a></p></form></section>"""
     return page_shell("Forgot password", body, None)
+
 
 def render_reset_password(token: str, msg: str = ""):
     password = password_control('New password', 'reset-password', 'password', 'new-password', 8)
-    body = f"""<section class='auth-wrap'><form class='auth-card' method='post' action='/reset-password'><p class='eyebrow eyebrow-dark'>Account recovery</p><h1>Choose a new password</h1>{flash(msg,'error') if msg else ''}<input type='hidden' name='token' value='{e(token)}'>{password}<button class='cta-primary auth-button' type='submit'>Reset password</button></form></section>"""
+    proof = (f"<input type='hidden' name='token' value='{e(token)}'>" if token else
+             "<label>Reset code<input required name='code' type='text' maxlength='100' autocomplete='one-time-code' autocapitalize='characters' spellcheck='false'></label><p class='form-hint'>Paste the code from your email. Do not share it.</p>")
+    body = f"""<section class='auth-wrap'><form class='auth-card' method='post' action='/reset-password'><p class='eyebrow eyebrow-dark'>Account recovery</p><h1>Choose a new password</h1>{flash(msg,'error') if msg else ''}{proof}{password}<button class='cta-primary auth-button' type='submit'>Reset password</button></form></section>"""
     return page_shell("Reset password", body, None)
 
 def render_account(user, msg=""):
+    proof = 'code' if selected_email_provider() == 'brevo' else 'link'
     email_status = ("<p class='muted'>Email verified.</p>" if user['email_verified'] else
-        f"<p class='muted'>Your email is not verified. You have access because the owner granted it.</p><form method='post' action='/account/verify-email' class='builder-form'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><button class='ghost-button' type='submit'>Send a verification link</button></form>")
+        f"<p class='muted'>Your email is not verified. You have access because the owner granted it.</p><form method='post' action='/account/verify-email' class='builder-form'><input type='hidden' name='csrf' value='{e(user['csrf'])}'><button class='ghost-button' type='submit'>Send a verification {proof}</button></form>")
     photo = user["profile_photo_url"] if "profile_photo_url" in user.keys() else ""
     if photo:
         avatar = f"<img src='{e(photo)}' alt='Profile photo'>"
@@ -1652,8 +1769,12 @@ def sync_opportunities_from_feeds() -> tuple[int, str]:
 
 def render_email_setup_panel(csrf: str) -> str:
     diag = email_setup_diagnostics()
-    if diag['provider'] == 'bird':
-        provider = 'Bird email API configured; delivery has not been verified.'
+    if diag['provider'] == 'brevo':
+        provider = 'Brevo email API selected; delivery has not been verified.'
+        sender = ('A sender address is configured. Verify it in Brevo; a Gmail sender may be rewritten.'
+                  if diag['sender_mode'] == 'custom' else 'The Brevo sender is missing. Set BREVO_FROM in Render.')
+    elif diag['provider'] == 'bird':
+        provider = 'Bird email API selected; delivery has not been verified.'
         if diag['sender_mode'] == 'sandbox':
             sender = "Bird's onboarding sender is restricted to sandbox addresses and verified workspace members. Public registrations need a verified sending domain."
         elif diag['sender_mode'] == 'missing':
@@ -1661,24 +1782,31 @@ def render_email_setup_panel(csrf: str) -> str:
         else:
             sender = 'A custom Bird sender is configured. Check that its domain is verified in Bird.'
     elif diag['provider'] == 'smtp':
-        provider = 'SMTP configured; delivery has not been verified.'
+        provider = 'SMTP selected; delivery has not been verified.'
         sender = ('A sender address is configured. Verify it with the email provider.' if diag['sender_mode'] == 'custom'
                   else 'The sender address is missing or local-only; configure a valid sender.')
+    elif diag['provider'] == 'invalid':
+        provider = 'The selected email provider is invalid; no email will be sent.'
+        sender = 'Choose brevo, bird or smtp in the private Render environment.'
     else:
         provider = 'No email provider configured.'
-        sender = 'Set up a transactional email provider to send verification and password-reset links.'
+        sender = 'Set up a transactional email provider to send account emails.'
     warnings = []
+    if diag['provider'] in ('brevo', 'bird', 'smtp') and not diag['configuration_ready']:
+        warnings.append('The selected provider is incomplete. No other provider will be used as a fallback.')
     if not diag['public_https_link']:
-        warnings.append('Account links do not have a public HTTPS address. Set APP_BASE_URL to the live site URL in Render.')
+        warnings.append('Account pages do not have a public HTTPS address. Set APP_BASE_URL to the live site URL in Render.')
     if diag['render_smtp_restricted_port']:
         warnings.append('Render Free blocks SMTP ports 25, 465 and 587. Use an HTTPS email API or a supported alternative.')
     if diag['bird_region'] in ('invalid', 'mismatch'):
         warnings.append('The Bird region appears invalid or does not match the API key region.')
+    if diag['provider'] == 'brevo':
+        warnings.append('Brevo may track email opens and clicks. Account codes are in the message, not in tracked links. Enable anonymous email tracking in Brevo if available.')
     notes = ''.join(f"<li>{e(note)}</li>" for note in warnings)
     return f"""<div class='dash-panel wide' id='email-delivery'><h2>Account email delivery</h2>
       <p><strong>Provider:</strong> {e(provider)}</p><p><strong>Sender:</strong> {e(sender)}</p>
       {f"<ul>{notes}</ul>" if notes else ''}
-      <p class='muted'>A provider accepting a request is not proof that it reached an inbox. Check spam and provider delivery events. This website sends verification links by email, not SMS.</p>
+      <p class='muted'>A provider accepting a request is not proof that it reached an inbox. Check spam and provider delivery events. Account verification uses email, not SMS.</p>
       <form method='post' action='/admin/email/test'><input type='hidden' name='csrf' value='{e(csrf)}'><button class='ghost-button' type='submit'>Send test email to the owner</button></form>
     </div>"""
 
@@ -2099,6 +2227,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         if path not in PUBLIC_POST_PATHS and not self.gate(user): return None
         if path == "/signup": return self.handle_signup(self.read_form())
         if path == "/login": return self.handle_login(self.read_form())
+        if path == "/verify-email": return self.handle_verify_email_code(self.read_form())
         if path == "/forgot-password": return self.handle_forgot_password(self.read_form())
         if path == "/reset-password": return self.handle_reset_password(self.read_form())
         if path == "/account/verify-email":
@@ -2107,7 +2236,8 @@ class ScholarHandler(BaseHTTPRequestHandler):
             if user['email_verified']: return self.send_html(render_account(user,'Your email is already verified.'))
             try:
                 send_verification_email(user['id'],user['email'],user['name'])
-                return self.send_html(render_account(user,'A verification link was requested. Check your inbox and spam folder.'))
+                proof = 'code' if selected_email_provider() == 'brevo' else 'link'
+                return self.send_html(render_account(user,f'A verification {proof} was requested. Check your inbox and spam folder.'))
             except Exception:
                 print('Verification email request failed.',file=sys.stderr)
                 return self.send_html(render_account(user,'Email delivery is unavailable. Your email remains unverified; please try again later.'),503)
@@ -2276,13 +2406,27 @@ class ScholarHandler(BaseHTTPRequestHandler):
             if not row: return None
             conn.execute("UPDATE email_tokens SET used_at=? WHERE id=?", (now_iso(), row["id"]))
             return row
-    def handle_verify_email(self, query):
-        row = self.consume_email_token(query.get("token", [""])[0], "verify_email")
+    def finish_email_verification(self, token, *, is_code=False):
+        row = self.consume_email_token(token, 'verify_email')
         if not row:
-            return self.send_html(render_notice("Verification failed", "That verification link is invalid or expired."), 400)
+            if is_code:
+                return self.send_html(render_verify_email('That verification code is invalid or expired.'), 400)
+            return self.send_html(render_notice('Verification failed', 'That verification link is invalid or expired.'), 400)
         with db() as conn:
-            conn.execute("UPDATE users SET email_verified=1 WHERE id=?", (row["user_id"],))
-        return self.send_html(render_notice("Email verified", "Your email has been verified. You can now log in."))
+            conn.execute('UPDATE users SET email_verified=1 WHERE id=?', (row['user_id'],))
+        return self.send_html(render_notice('Email verified', 'Your email has been verified. You can now log in.'))
+
+    def handle_verify_email(self, query):
+        # Preserve old Bird/SMTP links; bare URLs show a form for Brevo codes.
+        token = query.get('token', [''])[0]
+        if not token:
+            return self.send_html(render_verify_email())
+        return self.finish_email_verification(token)
+
+    def handle_verify_email_code(self, form):
+        code = normalize_email_code(form.get('code', ''))
+        return self.finish_email_verification(code, is_code=True)
+
     def handle_forgot_password(self, form):
         email=form.get("email","").strip().lower()
         with db() as conn:
@@ -2290,12 +2434,15 @@ class ScholarHandler(BaseHTTPRequestHandler):
         if user and EMAIL_ENABLED:
             try: send_password_reset_email(user['id'],user['email'],user['name'])
             except Exception: print('Password reset email request failed.',file=sys.stderr)
-        return self.send_html(render_forgot_password("If that account exists and email delivery is available, a reset link has been requested. Check your inbox and spam folder."))
+        proof = 'code' if selected_email_provider() == 'brevo' else 'link'
+        return self.send_html(render_forgot_password(f'If that account exists and email delivery is available, a reset {proof} has been requested. Check your inbox and spam folder.'))
+
     def handle_reset_password(self, form):
-        token=form.get("token",""); password=form.get("password","")
-        if len(password)<8: return self.send_html(render_reset_password(token, "Password must be at least 8 characters."), 400)
-        row=self.consume_email_token(token, "password_reset")
-        if not row: return self.send_html(render_notice("Reset failed", "That password reset link is invalid or expired."), 400)
+        legacy_token=form.get('token',''); password=form.get('password','')
+        token=legacy_token or normalize_email_code(form.get('code',''))
+        if len(password)<8: return self.send_html(render_reset_password(legacy_token, 'Password must be at least 8 characters.'), 400)
+        row=self.consume_email_token(token, 'password_reset')
+        if not row: return self.send_html(render_notice('Reset failed', 'That password reset link or code is invalid or expired.'), 400)
         salt, hashed=hash_password(password)
         with db() as conn:
             conn.execute("UPDATE users SET salt=?, password_hash=? WHERE id=?", (salt, hashed, row["user_id"]))
@@ -2330,13 +2477,15 @@ class ScholarHandler(BaseHTTPRequestHandler):
                 user_id=cur.lastrowid
         except DB_INTEGRITY_ERRORS:
             return self.send_html(render_auth('signup','That email already has an account.'),409)
+        proof = 'code' if selected_email_provider() == 'brevo' else 'link'
         if EMAIL_ENABLED:
             try:
                 send_verification_email(user_id,email,name)
-                return self.send_html(render_notice('Check your email','Your account was created and a verification email was requested. Check your inbox and spam folder, then open the link. If it does not arrive, ask the owner to grant access.'))
+                action = 'follow the instructions to enter your code' if proof == 'code' else 'open the link'
+                return self.send_html(render_notice('Check your email',f'Your account was created and a verification email was requested. Check your inbox and spam folder, then {action}. If it does not arrive, ask the owner to grant access.'))
             except Exception:
                 print('Verification delivery failed; account remains unverified.',file=sys.stderr)
-        return self.send_html(render_notice('Account awaiting access','Your account was created, but a verification email could not be sent. Your account is not yet verified. Ask the owner to grant access, or try signing in later for a new link.'))
+        return self.send_html(render_notice('Account awaiting access',f'Your account was created, but a verification email could not be sent. Your account is not yet verified. Ask the owner to grant access, or try signing in later for a new {proof}.'))
 
     def handle_login(self, form):
         email=form.get('email','').strip().lower(); password=form.get('password','')
@@ -2350,7 +2499,8 @@ class ScholarHandler(BaseHTTPRequestHandler):
             if EMAIL_ENABLED:
                 try: send_verification_email(user['id'],user['email'],user['name']); sent=True
                 except Exception: print('Verification email request failed.',file=sys.stderr)
-            msg = ('Please verify your email. A new link was requested; check your inbox and spam, or ask the owner to grant access.' if sent else
+            proof = 'code' if selected_email_provider() == 'brevo' else 'link'
+            msg = (f'Please verify your email. A new {proof} was requested; check your inbox and spam, or ask the owner to grant access.' if sent else
                    'Please verify your email or ask the owner to grant access. Email delivery is currently unavailable.')
             return self.send_html(render_auth('login',msg),403)
         nxt=(form.get('next') or '').strip()
@@ -2736,14 +2886,16 @@ class ScholarHandler(BaseHTTPRequestHandler):
         """The owner can test the configured transport only to the owner's own mailbox."""
         result = {'status': 'not_configured', 'checked_at': now_iso()}
         if not EMAIL_ENABLED:
-            message = 'No email provider is configured. Set up an email API and verified sender in Render.'
+            message = ('No email provider is configured. Set up an email API and verified sender in Render.'
+                       if selected_email_provider() == 'none' else
+                       'The selected email provider is incomplete or invalid. Check its Render settings; no fallback was used.')
             kind = 'error'
         else:
             try:
                 send_email(OWNER_ADMIN_EMAIL, '70Scholar account email test',
                            'This is a test email requested from the 70Scholar owner dashboard. '
                            'If you received it, the provider delivered this test to your inbox. '
-                           'Verification emails to other recipients may still require a verified sending domain.')
+                           'Messages to other recipients can still be blocked or filtered.')
                 result['status'] = 'provider_accepted'
                 message = ('The email provider accepted the test request. Check your owner inbox and spam folder. '
                            'Acceptance does not guarantee delivery or show whether the sending domain is verified.')

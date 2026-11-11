@@ -19,6 +19,9 @@ url = os.environ.get('SCHOLAR70_TEST_DATABASE_URL', 'postgresql://testowner@127.
 if (urlparse(url).hostname or '').lower() not in ('localhost', '127.0.0.1', '::1'):
     raise SystemExit('This test runner only permits a disposable local PostgreSQL server.')
 os.environ['ADMIN_PASSWORD'] = 'TestOwnerPassword123!'
+# Never use real email-provider credentials or send real mail from a test suite.
+for key in ('EMAIL_PROVIDER', 'BREVO_API_KEY', 'BREVO_FROM', 'BIRD_API_KEY', 'SMTP_HOST'):
+    os.environ.pop(key, None)
 
 import server
 server.DATABASE_URL = url
@@ -35,7 +38,7 @@ names = ['test_v17', 'test_v18_security.EmailAndFetchTests', 'test_v19_slideshow
          'test_v20_branding', 'test_v21_contact', 'test_v22_bootcamps',
          'test_v22_persistence', 'test_v22_storage_safety',
          'test_v23_daily_verse', 'test_v23_private_storage', 'test_v24_auth',
-         'test_v25_competitions']
+         'test_v25_competitions', 'test_v26_brevo']
 suite = unittest.TestLoader().loadTestsFromNames(names)
 result = unittest.TextTestRunner(verbosity=2).run(suite)
 sys.exit(not result.wasSuccessful())

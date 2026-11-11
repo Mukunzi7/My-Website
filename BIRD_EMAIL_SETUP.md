@@ -1,8 +1,14 @@
 # Bird or SMTP setup
 
-70Scholar sends real verification and password-reset links only when a delivery provider is
-configured. Failure or an absent provider does not verify accounts; the owner can separately
-grant access under Admin → People.
+70Scholar sends real account verification and password-reset emails only when a delivery
+provider is configured. Failure or an absent provider does not verify accounts; the owner
+can separately grant access under Admin → People. For the optional no-custom-domain Brevo
+setup, see `BREVO_EMAIL_SETUP.md`.
+
+Set `EMAIL_PROVIDER=bird` or `EMAIL_PROVIDER=smtp` to explicitly select one. An explicitly
+selected provider never falls back to another one when incomplete or rejected. If the selector
+is unset, the original Bird-first, then SMTP behavior remains unchanged. Brevo is used only
+when explicitly selected. Changing Render variables requires a redeploy/restart.
 
 ## Bird
 
@@ -26,8 +32,9 @@ as transactional, and disables click/open tracking for authentication links. Off
 
 ## SMTP alternative
 
-Leave `BIRD_API_KEY` unset; set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`,
-`SMTP_FROM`, `SMTP_TLS`, and `APP_BASE_URL`. Use a verified sender and TLS. **Render Free
+Set `EMAIL_PROVIDER=smtp` to select SMTP even if a Bird key remains configured. Alternatively,
+if the selector is unset, leave `BIRD_API_KEY` unset. Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
+`SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_TLS`, and `APP_BASE_URL`. Use a verified sender and TLS. **Render Free
 blocks outbound ports 25, 465 and 587**, so ordinary SMTP will not work on those ports there;
 use an HTTPS email API or a genuinely supported alternative. Test with a real mailbox. A
 provider failure leaves the user unverified rather than granting access.

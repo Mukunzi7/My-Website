@@ -39,6 +39,9 @@ services:
         sync: false
       - key: BIRD_REGION
         sync: false
+      # Optional Brevo setup is added manually in Render Environment after
+      # creating the sender and API key: EMAIL_PROVIDER=brevo, BREVO_FROM,
+      # BREVO_API_KEY. Do not remove existing Bird settings. See BREVO_EMAIL_SETUP.md.
 
 # PERSISTENT STORAGE: DATABASE_URL points to an external PostgreSQL database;
 # SUPABASE_* configure a server-only private file bucket. Startup fails if the

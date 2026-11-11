@@ -14,8 +14,8 @@ from http.server import ThreadingHTTPServer
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 # Remove any live-service configuration before importing the app.
-for key in ('DATABASE_URL', 'BIRD_API_KEY', 'SMTP_HOST', 'SUPABASE_URL', 'SUPABASE_SECRET_KEY',
-            'SUPABASE_STORAGE_BUCKET', 'RENDER', 'APP_BASE_URL', 'RENDER_EXTERNAL_URL'):
+for key in ('DATABASE_URL', 'EMAIL_PROVIDER', 'BREVO_API_KEY', 'BREVO_FROM', 'BIRD_API_KEY', 'SMTP_HOST',
+            'SUPABASE_URL', 'SUPABASE_SECRET_KEY', 'SUPABASE_STORAGE_BUCKET', 'RENDER', 'APP_BASE_URL', 'RENDER_EXTERNAL_URL'):
     os.environ.pop(key, None)
 os.environ['ADMIN_PASSWORD'] = 'TestOwnerPassword123!'
 import server
