@@ -175,6 +175,8 @@ main { min-height: 60vh; }
 .opp-header { max-width: 800px; margin-bottom: 2.8rem; }
 .feature-cards, .opportunity-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.4rem; }
 .opp-card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 2rem; box-shadow: var(--shadow); }
+.opp-card-link { color: inherit; text-decoration: none; transition: border-color .2s, transform .2s; }
+.opp-card-link:hover { border-color: var(--gold); transform: translateY(-3px); }
 .opp-card p { color: var(--muted); margin: 0; }
 .icon-dot { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; background: var(--gold-soft); font-size: 1.5rem; margin-bottom: 1.4rem; }
 
@@ -205,6 +207,8 @@ main { min-height: 60vh; }
 .page-hero.compact { padding-top: clamp(2.5rem, 5vw, 4rem); padding-bottom: clamp(2.5rem, 5vw, 4rem); }
 .page-hero h1 { max-width: 900px; }
 .page-hero p { max-width: 720px; color: rgba(246, 243, 236, .75); margin: 0; }
+.page-hero .finder-link { margin-top: 1rem; }
+.finder-link a { color: #FFE1A5; font-weight: 800; text-underline-offset: .2em; }
 .panel-section, .listing-grid, .market-grid, .dashboard-grid, .account-grid, .messages-grid, .admin-grid, .workspace-grid, .project-detail, .mini-grid, .stat-card, .filter-bar, .builder-form, .momo-box, .payment-card { max-width: var(--maxw); }
 .panel-section { margin: 2.5rem auto; padding: 0 clamp(1.25rem, 6vw, 2rem); }
 .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }

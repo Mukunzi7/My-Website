@@ -37,7 +37,7 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT / "uploads")))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 APP_NAME = "70Scholar"
-APP_VERSION = "v24-account-email"
+APP_VERSION = "v25-competitions"
 # A small, static collection avoids third-party requests on every page view.
 # Text is the public-domain World English Bible Protestant edition, as published
 # by eBible.org; each passage retains a link to the original chapter and verse.
@@ -985,7 +985,7 @@ def page_shell(title: str, body: str, user: sqlite3.Row | None = None, active: s
         nav_auth = f"""<a class="nav-link {'is-active' if active=='dashboard' else ''}" href="/dashboard">Dashboard</a><a class="nav-link {'is-active' if active=='workspace' else ''}" href="/workspace">Workspace</a><a class="nav-link {'is-active' if active=='messages' else ''}" href="/messages">Messages</a><a class="nav-link {'is-active' if active=='submit' else ''}" href="/submit">Add opportunity</a><a class="nav-link {'is-active' if active=='account' else ''}" href="/account">Account</a>{admin_link}{profile_link}<form class="logout-form" action="/logout" method="post"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><button>Log out</button></form>"""
     else:
         nav_auth = "<a class='nav-link' href='/login'>Log in</a><a class='pill small' href='/signup'>Create account</a>"
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="icon" type="image/png" sizes="192x192" href="/static/favicon.png?v={APP_VERSION}"><link rel="shortcut icon" href="/favicon.ico?v={APP_VERSION}"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='courses' else ''}" href="/courses">Courses</a><a class="nav-link {'is-active' if active=='exams' else ''}" href="/exams">Exam prep</a><a class="nav-link {'is-active' if active=='programs' else ''}" href="/programs">Programs</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p>
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{e(title)} — {APP_NAME}</title><meta name="description" content="{APP_NAME} helps students discover opportunities, showcase projects, connect with sponsors, and build what comes next."><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="icon" type="image/png" sizes="192x192" href="/static/favicon.png?v={APP_VERSION}"><link rel="shortcut icon" href="/favicon.ico?v={APP_VERSION}"><link rel="stylesheet" href="/static/styles.css?v={APP_VERSION}"></head><body><header class="site-header"><a href="/" class="logo">{logo}</a><nav class="top-nav" aria-label="Primary navigation"><a class="nav-link {'is-active' if active=='opportunities' else ''}" href="/opportunities">Opportunities</a><a class="nav-link {'is-active' if active=='competitions' else ''}" href="/competitions">Competitions</a><a class="nav-link {'is-active' if active=='courses' else ''}" href="/courses">Courses</a><a class="nav-link {'is-active' if active=='exams' else ''}" href="/exams">Exam prep</a><a class="nav-link {'is-active' if active=='programs' else ''}" href="/programs">Programs</a><a class="nav-link {'is-active' if active=='marketplace' else ''}" href="/marketplace">Marketplace</a>{nav_auth}</nav></header><main>{body}</main><footer class="footer"><div class="logo">{logo}</div><p>{APP_TAGLINE}</p>
     <div class="helpline"><span class="helpline-label">Need help?</span>
       <div class="helpline-contacts">
         <a class="helpline-phone" href="tel:{e(phone_link)}"><svg class="contact-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.3 1.8a2 2 0 0 1-.6 1.8L7.5 8.6a16 16 0 0 0 7.9 7.9l1.3-1.3a2 2 0 0 1 1.8-.6l1.8.3a2 2 0 0 1 1.7 2z"/></svg> {e(HELPLINE_PHONE)}</a>
@@ -1033,11 +1033,11 @@ def render_home(user):
             "projects": conn.execute("SELECT COUNT(*) c FROM projects WHERE status='public'").fetchone()["c"],
             "pledged": conn.execute("SELECT COALESCE(SUM(amount),0) c FROM pledges WHERE status='paid_confirmed'").fetchone()["c"],
         }
-    story_section = f'''<section class="story-section"><div class="story-inner"><p class="eyebrow eyebrow-dark">The story 70Scholar is building</p><h2>A path for the student who almost gave up searching.</h2><p>70Scholar was created for students who keep asking, "Where are the scholarships, internships, competitions, sponsors, and people who will believe in my project?" The goal is to make answers easier to find, applications easier to prepare, and student projects easier to support.</p><p>As more students use 70Scholar, this section will grow into a verified wall of wins: scholarships found, internships applied for, jobs reached, sponsors connected, and projects funded. We will share successes only when students confirm them — because trust matters.</p><div class="impact-stats"><div><strong>{stats['opportunities']}</strong><span>opportunities currently listed</span></div><div><strong>{stats['projects']}</strong><span>student projects published</span></div><div><strong>{money(stats['pledged'])}</strong><span>owner-confirmed support</span></div></div></div></section>'''
+    story_section = f'''<section class="story-section"><div class="story-inner"><p class="eyebrow eyebrow-dark">The story 70Scholar is building</p><h2>A path for the student who almost gave up searching.</h2><p>70Scholar was created for students who keep asking, "Where are the scholarships, internships, competitions, sponsors, and people who will believe in my project?" The goal is to make answers easier to find, applications easier to prepare, and student projects easier to support.</p><p>As more students use 70Scholar, this section will grow into a verified wall of wins: scholarships found, internships applied for, jobs reached, sponsors connected, and projects funded. We will share successes only when students confirm them — because trust matters.</p><div class="impact-stats"><div><strong>{stats['opportunities']}</strong><span>opportunities and competitions listed</span></div><div><strong>{stats['projects']}</strong><span>student projects published</span></div><div><strong>{money(stats['pledged'])}</strong><span>owner-confirmed support</span></div></div></div></section>'''
     hero_section = f'''<section class="hero" id="hero"><img class="hero-background" src="/static/images/hero-school-group.jpg?v={APP_VERSION}" alt="Students and educators together at a school award event" width="1600" height="1066" fetchpriority="high"><div class="hero-content"><img class="hero-logo" src="/static/images/seven-scholars-mark.jpg?v={APP_VERSION}" alt="Seven Scholars logo" width="720" height="720"><p class="eyebrow">Matched to your level. Built to launch.</p><h1>There's a version of your future<br>still waiting to be found.</h1><p class="subhead">70Scholar finds scholarships, internships, grants, and competitions built for where you stand — then gives you a secure workspace to build the projects that get you noticed, funded, or sold.</p><div class="hero-actions"><a href="/opportunities" class="cta-primary">See real open opportunities <span class="arrow">→</span></a><a href="/marketplace" class="cta-secondary">Fund or buy student projects</a></div><p class="hero-micro">Real listings, refreshed from trusted opportunity feeds.</p></div><div class="scroll-hint" aria-hidden="true"><span></span></div></section>'''
     gap_section = '''<section class="gap-section"><p class="eyebrow eyebrow-dark">Why most students miss out</p><p class="gap-statement">Most scholarships don't go unclaimed because nobody qualified. They go unclaimed because the right student never found them — or found them too late to build something strong.</p></section>'''
     journey_section = '''<section class="journey-section" id="journey"><div class="journey-header"><p class="eyebrow">The path across</p><h2>Discover. Build. Launch. Fund.</h2></div><div class="journey-path"><div class="journey-step"><span class="step-number">01</span><h3>Discover</h3><p>Browse real openings and save the ones that fit your country, field, deadline, and level.</p></div><div class="journey-step"><span class="step-number">02</span><h3>Build</h3><p>Keep drafts, pitch text, links, files, and project details in your private account so unfinished work stays safe.</p></div><div class="journey-step"><span class="step-number">03</span><h3>Launch</h3><p>Publish a project to the marketplace, attach a demo or release file, and invite buyers, donors, mentors, or funders.</p></div></div></section>'''
-    opportunities_section = '''<section class="opportunities-section"><div class="opp-header"><p class="eyebrow eyebrow-dark">What's waiting on the other side</p><h2>Every door, sorted by which one actually opens for you.</h2></div><div class="opportunity-cards feature-cards"><div class="opp-card"><div class="icon-dot">🎓</div><h3>Scholarships</h3><p>Funding matched to your field, level, and country, with deadlines you can track.</p></div><div class="opp-card"><div class="icon-dot">💼</div><h3>Internships</h3><p>Roles sized for where you actually are in school, not five-year-experience traps.</p></div><div class="opp-card"><div class="icon-dot">🏆</div><h3>Competitions & grants</h3><p>Contests and small grants your project can realistically compete for.</p></div></div></section>'''
+    opportunities_section = '''<section class="opportunities-section"><div class="opp-header"><p class="eyebrow eyebrow-dark">What's waiting on the other side</p><h2>Every door, sorted by which one actually opens for you.</h2></div><div class="opportunity-cards feature-cards"><div class="opp-card"><div class="icon-dot">🎓</div><h3>Scholarships</h3><p>Funding matched to your field, level, and country, with deadlines you can track.</p></div><div class="opp-card"><div class="icon-dot">💼</div><h3>Internships</h3><p>Roles sized for where you actually are in school, not five-year-experience traps.</p></div><div class="opp-card"><div class="icon-dot">💡</div><h3>Grants</h3><p>Funding to help students and young innovators develop their ideas.</p></div><a class="opp-card opp-card-link" href="/competitions"><div class="icon-dot">🏆</div><h3>Competitions</h3><p>Explore international competitions, olympiads and other contests.</p></a></div></section>'''
     workspace_section = '''<section class="workspace-section"><div class="workspace-inner"><div class="workspace-visual" aria-hidden="true"><div class="ws-card c1"></div><div class="ws-card c2"></div><div class="ws-card c3"></div></div><div class="workspace-copy"><p class="eyebrow">Where the work actually happens</p><h2>Not just a plan. A place to build it.</h2><p>Create an account, save unfinished project drafts, upload a release file, and later publish the project for funding or sale. Funders can pledge support, buyers can contact makers, and students can continue from where they stopped.</p></div></div></section>'''
     final_cta_section = '''<section class="final-cta" id="final-cta"><h2>Cross over.</h2><p>Somewhere on the other side, there's a deadline that hasn't found you yet. Better to be early.</p><a href="/signup" class="cta-primary">Create your free workspace <span class="arrow">→</span></a></section>'''
     programs_section = """<section class="programs-section"><div class="programs-inner">
@@ -1159,6 +1159,7 @@ def render_extra_features(opportunity_count: int) -> str:
       <h2>One account. Every step from discovery to funding.</h2>
       <div class="feature-grid">
         <a class="feature-tile" href="/opportunities"><span class="feature-icon">🔎</span><h3>Opportunity finder</h3><p>Search by country, level, field and deadline. Save what fits.</p></a>
+        <a class="feature-tile" href="/competitions"><span class="feature-icon">🏆</span><h3>Competitions</h3><p>Explore international competitions, olympiads and hackathons.</p></a>
         <a class="feature-tile" href="/courses"><span class="feature-icon">📚</span><h3>Pre-university courses</h3><p>Close the gap before you apply with short, focused courses.</p></a>
         <a class="feature-tile" href="/exams"><span class="feature-icon">📝</span><h3>Exam preparation</h3><p>Practice plans for the tests that unlock university offers.</p></a>
         <a class="feature-tile" href="/submit"><span class="feature-icon">➕</span><h3>Community submissions</h3><p>Add a scholarship or competition and help other students find it.</p></a>
@@ -1166,7 +1167,7 @@ def render_extra_features(opportunity_count: int) -> str:
         <a class="feature-tile" href="/signup"><span class="feature-icon">🔐</span><h3>Your private workspace</h3><p>Drafts, uploads, saved listings and messages in one place.</p></a>
       </div></div></section>
     <section class="trust-section"><div class="trust-inner">
-      <div class="trust-stat"><strong data-count="{opportunity_count}">{opportunity_count}</strong><span>opportunities listed</span></div>
+      <div class="trust-stat"><strong data-count="{opportunity_count}">{opportunity_count}</strong><span>opportunities and competitions listed</span></div>
       <div class="trust-stat"><strong data-count="{len(FEATURED_PROGRAMS)}">{len(FEATURED_PROGRAMS)}</strong><span>featured programmes</span></div>
       <div class="trust-stat"><strong data-count="{len(PREUNI_COURSES)}">{len(PREUNI_COURSES)}</strong><span>pre-university courses</span></div>
       <div class="trust-stat"><strong data-count="{len(EXAM_PREP)}">{len(EXAM_PREP)}</strong><span>exam prep tracks</span></div>
@@ -1251,7 +1252,7 @@ def render_submit(user, msg: str = "", kind: str = "success"):
         mine = conn.execute("SELECT * FROM opportunity_submissions WHERE user_id=? ORDER BY id DESC LIMIT 10", (user["id"],)).fetchall()
     rows = "".join([f"<li><strong>{e(r['title'])}</strong> <span class='tag'>{e(r['status'])}</span><br><span>{e(r['type'])} · {e(r['deadline'])}</span></li>" for r in mine])
     body = f"""<section class="page-hero compact"><p class="eyebrow">Community submissions</p>
-      <h1>Add an opportunity.</h1><p>Found a scholarship, competition or application others should know about? Submit it here. The admin reviews every submission before it appears publicly.</p></section>
+      <h1>Add an opportunity or competition.</h1><p>Found a scholarship, competition or application others should know about? Submit it here. Choose Competition or Hackathon for a contest. The admin reviews every submission before it appears publicly.</p></section>
       <section class="panel-section">{flash(msg,kind) if msg else ''}
       <div class="submit-layout">
         <form method="post" action="/opportunity/submit" class="builder-form">
@@ -1373,24 +1374,92 @@ def render_account(user, msg=""):
     """
     return page_shell("Account", body, user, "account")
 
-def render_opportunities(user, query):
-    q = (query.get("q", [""])[0] or "").strip(); typ = (query.get("type", [""])[0] or "").strip(); params=[]; where=["1=1"]
+# Keep the existing records and bookmarks in one durable table. The two views
+# classify each listing in one place, so moving a card does not delete or copy it.
+LISTING_TYPES = ('Scholarship', 'Internship', 'Competition', 'Grant', 'Hackathon',
+                 'Application', 'Opportunity', 'Summer bootcamp', 'Summer program', 'Research program')
+COMPETITION_TYPES = frozenset(('competition', 'competitions', 'contest', 'contests',
+                               'olympiad', 'olympiads', 'hackathon', 'hackathons',
+                               'tournament', 'tournaments', 'challenge', 'challenges'))
+COMPETITION_TITLE = re.compile(r'\b(?:competitions?|contests?|olympiads?|hackathons?|tournaments?)\b', re.I)
+
+
+def is_competition_listing(item) -> bool:
+    typ = (item['type'] or '').strip().lower()
+    if typ in COMPETITION_TYPES:
+        return True
+    # A few legacy listings were labelled Grant or Opportunity even though the
+    # title explicitly identifies a contest (e.g. a competition offering a grant).
+    # Preserve clearly classified scholarships and internships as the owner set them.
+    return typ in ('', 'grant', 'opportunity', 'application', 'other') and bool(
+        COMPETITION_TITLE.search(item['title'] or ''))
+
+
+def is_hackathon_listing(item) -> bool:
+    return (item['type'] or '').strip().lower() in ('hackathon', 'hackathons') or bool(
+        re.search(r'\bhackathons?\b', item['title'] or '', re.I))
+
+
+def render_listings(user, query, competitions=False):
+    q = (query.get('q', [''])[0] or '').strip()
+    typ = (query.get('type', [''])[0] or '').strip()
+    params = []; where = ['1=1']
     if q:
-        like=f"%{q}%"; where.append("(title LIKE ? OR provider LIKE ? OR country LIKE ? OR level LIKE ? OR tags LIKE ? OR summary LIKE ?)"); params += [like]*6
-    if typ: where.append("type=?"); params.append(typ)
+        like = f'%{q.lower()}%'
+        where.append('(LOWER(title) LIKE ? OR LOWER(provider) LIKE ? OR LOWER(country) LIKE ? OR LOWER(level) LIKE ? OR LOWER(tags) LIKE ? OR LOWER(summary) LIKE ?)')
+        params += [like] * 6
+    # The competition filter is applied after classification, so legacy contest
+    # titles under Grant are not lost. Other opportunity type filters stay exact.
+    if typ and not competitions:
+        where.append('type=?'); params.append(typ)
     with db() as conn:
-        items = conn.execute(f"SELECT * FROM opportunities WHERE {' AND '.join(where)} ORDER BY deadline ASC", params).fetchall()
-        bookmarks = {r["opportunity_id"] for r in conn.execute("SELECT opportunity_id FROM bookmarks WHERE user_id=?", (user["id"],)).fetchall()} if user else set()
-    cards=[]
+        rows = conn.execute(f"SELECT * FROM opportunities WHERE {' AND '.join(where)} ORDER BY deadline ASC", params).fetchall()
+        bookmarks = {r['opportunity_id'] for r in conn.execute('SELECT opportunity_id FROM bookmarks WHERE user_id=?', (user['id'],)).fetchall()} if user else set()
+    items = [item for item in rows if is_competition_listing(item) == competitions]
+    if competitions and typ.lower() in ('hackathon', 'hackathons'):
+        items = [item for item in items if is_hackathon_listing(item)]
+    elif competitions and typ.lower() in ('competition', 'competitions', 'contest', 'olympiad', 'tournament', 'challenge'):
+        items = [item for item in items if not is_hackathon_listing(item)]
+    cards = []
     for item in items:
         if user:
-            saved = item["id"] in bookmarks
-            save_button = f"""<form method="post" action="/bookmark" class="inline-form"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><input type="hidden" name="opportunity_id" value="{item['id']}"><button class="ghost-button" type="submit">{'Saved ✓' if saved else 'Save'}</button></form>"""
-        else: save_button = "<a class='ghost-button' href='/login'>Log in to save</a>"
-        cards.append(f"""<article class="listing-card"><div class="listing-top"><span class="tag">{e(item['type'])}</span><span class="deadline">{e(deadline_badge(item['deadline']))}</span></div><h3>{e(item['title'])}</h3><p class="provider">{e(item['provider'])} · {e(item['country'])}</p><p>{e(item['summary'])}</p><dl class="mini-meta"><div><dt>Level</dt><dd>{e(item['level'])}</dd></div><div><dt>Deadline</dt><dd>{e(item['deadline'])}</dd></div></dl><p class="source">Source: {e(item['source'])}</p><div class="card-actions"><a class="cta-primary slim" target="_blank" rel="noopener" href="{e(anchor_url(item['url']))}">Official page ↗</a>{save_button}</div></article>""")
-    def sel(x): return "selected" if typ == x else ""
-    body = f"""<section class="page-hero compact"><p class="eyebrow">Opportunity finder</p><h1>Real applications, contests, internships, and grants.</h1><p>Find scholarships, summer programmes and bootcamps here. Application status, dates, costs and eligibility can change; check the official page before applying.</p></section><section class="panel-section"><form class="filter-bar" method="get" action="/opportunities"><input name="q" value="{e(q)}" placeholder="Search Rwanda, AI, climate, internship..."><select name="type"><option value="">All types</option><option {sel('Scholarship')} value="Scholarship">Scholarships</option><option {sel('Internship')} value="Internship">Internships</option><option {sel('Competition')} value="Competition">Competitions</option><option {sel('Grant')} value="Grant">Grants</option><option {sel('Hackathon')} value="Hackathon">Hackathons</option><option {sel('Summer bootcamp')} value="Summer bootcamp">Summer bootcamps</option><option {sel('Summer program')} value="Summer program">Summer programmes</option></select><button class="cta-primary slim" type="submit">Filter</button></form><div class="listing-grid">{''.join(cards) if cards else '<p class="empty">No matches yet. Try a different search.</p>'}</div></section>"""
-    return page_shell("Opportunities", body, user, "opportunities")
+            saved = item['id'] in bookmarks
+            save_button = f'''<form method="post" action="/bookmark" class="inline-form"><input type="hidden" name="csrf" value="{e(user['csrf'])}"><input type="hidden" name="opportunity_id" value="{item['id']}"><button class="ghost-button" type="submit">{'Saved ✓' if saved else 'Save'}</button></form>'''
+        else:
+            save_button = "<a class='ghost-button' href='/login'>Log in to save</a>"
+        display_type = item['type']
+        if competitions and (item['type'] or '').strip().lower() not in COMPETITION_TYPES:
+            display_type = 'Competition · ' + (item['type'] or 'Listing')
+        cards.append(f'''<article class="listing-card"><div class="listing-top"><span class="tag">{e(display_type)}</span><span class="deadline">{e(deadline_badge(item['deadline']))}</span></div><h3>{e(item['title'])}</h3><p class="provider">{e(item['provider'])} · {e(item['country'])}</p><p>{e(item['summary'])}</p><dl class="mini-meta"><div><dt>Level</dt><dd>{e(item['level'])}</dd></div><div><dt>Deadline</dt><dd>{e(item['deadline'])}</dd></div></dl><p class="source">Source: {e(item['source'])}</p><div class="card-actions"><a class="cta-primary slim" target="_blank" rel="noopener" href="{e(anchor_url(item['url']))}">Official page ↗</a>{save_button}</div></article>''')
+    def sel(value): return 'selected' if typ.lower() == value.lower() else ''
+    if competitions:
+        title, path, active = 'Competitions', '/competitions', 'competitions'
+        eyebrow, heading = 'Competition finder', 'Competitions, olympiads and contests.'
+        intro = 'Explore international competitions, hackathons and other contests. Check the official page for current dates, costs and eligibility.'
+        cross_link = '<a href="/opportunities">Browse scholarships, internships and grants →</a> · <a href="/submit">Suggest a competition</a>'
+        options = f'''<option value="">All competitions</option><option {sel('Competition')} value="Competition">Competitions &amp; olympiads</option><option {sel('Hackathon')} value="Hackathon">Hackathons</option>'''
+        placeholder = 'Search physics, maths, country, level...'
+        empty = 'No competitions match your search.'
+    else:
+        title, path, active = 'Opportunities', '/opportunities', 'opportunities'
+        eyebrow, heading = 'Opportunity finder', 'Scholarships, internships and grants.'
+        intro = 'Find scholarships, summer programmes and bootcamps here. Application status, dates, costs and eligibility can change; check the official page before applying.'
+        cross_link = '<a href="/competitions">Looking for competitions? Explore competitions →</a>'
+        options = f'''<option value="">All types</option><option {sel('Scholarship')} value="Scholarship">Scholarships</option><option {sel('Internship')} value="Internship">Internships</option><option {sel('Grant')} value="Grant">Grants</option><option {sel('Summer bootcamp')} value="Summer bootcamp">Summer bootcamps</option><option {sel('Summer program')} value="Summer program">Summer programmes</option>'''
+        placeholder = 'Search Rwanda, AI, climate, internship...'
+        empty = 'No opportunities match your search.'
+    cards_html = ''.join(cards) if cards else f'<p class="empty">{e(empty)} Try a different search.</p>'
+    body = f'''<section class="page-hero compact"><p class="eyebrow">{eyebrow}</p><h1>{heading}</h1><p>{intro}</p><p class="finder-link">{cross_link}</p></section>
+    <section class="panel-section"><form class="filter-bar" method="get" action="{path}"><label>Search<input type="search" name="q" value="{e(q)}" placeholder="{e(placeholder)}"></label><label>Type<select name="type">{options}</select></label><button class="cta-primary slim" type="submit">Filter</button></form><div class="listing-grid">{cards_html}</div></section>'''
+    return page_shell(title, body, user, active)
+
+
+def render_opportunities(user, query):
+    return render_listings(user, query, competitions=False)
+
+
+def render_competitions(user, query):
+    return render_listings(user, query, competitions=True)
 
 def render_dashboard(user):
     with db() as conn:
@@ -1400,13 +1469,17 @@ def render_dashboard(user):
         inbox = conn.execute("SELECT m.*,p.title FROM project_messages m JOIN projects p ON p.id=m.project_id WHERE p.user_id=? AND m.status='visible' ORDER BY m.id DESC LIMIT 8", (user['id'],)).fetchall()
         names = _registered_names(conn)
     project_cards = [f"<article class='mini-card'><span class='tag'>{e(p['status'].replace('_',' ').title())}</span><h3>{e(p['title'])}</h3><p>{e(p['summary'])}</p><a href='/workspace?edit={p['id']}'>Continue work →</a></article>" for p in projects]
-    saved_cards = [f"<li><a target='_blank' rel='noopener' href='{e(anchor_url(o['url']))}'>{e(o['title'])}</a><span>{e(deadline_badge(o['deadline']))}</span></li>" for o in saved]
+    def saved_cards(items):
+        return [f"<li><a target='_blank' rel='noopener' href='{e(anchor_url(o['url']))}'>{e(o['title'])}</a><span>{e(deadline_badge(o['deadline']))}</span></li>" for o in items]
+    saved_opportunities = saved_cards([o for o in saved if not is_competition_listing(o)])
+    saved_competitions = saved_cards([o for o in saved if is_competition_listing(o)])
     pledge_cards = [f"<li>{money(pl['amount'])} for <a href='/project?id={pl['project_id']}'>{e(redact_public_text(pl['title'], names))}</a><span>{e(pl['status'].replace('_',' '))}</span></li>" for pl in pledges]
     inbox_cards = [f"<li><a href='/project?id={m['project_id']}'>{e(redact_public_text(m['title'], names))}</a><span>Community member: {e(redact_public_text(m['message'][:100], names))}</span></li>" for m in inbox]
     access_note = "Email verified" if user['email_verified'] else "Access granted by the owner; email not yet verified"
     body = f"""<section class='page-hero compact dashboard-hero'><p class='eyebrow'>Welcome back</p><h1>Continue your unfinished work.</h1><p>Your saved opportunities, drafts, uploads and funding activity live here.</p><a href='/workspace' class='cta-primary'>Open builder workspace →</a></section>
     <section class='dashboard-grid'><div class='flash info'>{e(access_note)}.</div><div class='dash-panel large'><div class='panel-head'><h2>Your projects</h2><a href='/workspace'>New project</a></div><div class='mini-grid'>{''.join(project_cards) if project_cards else '<p class="empty">No drafts yet. Start one in the workspace.</p>'}</div></div>
-    <div class='dash-panel'><h2>Saved opportunities</h2><ul class='clean-list'>{''.join(saved_cards) if saved_cards else '<li>No saved opportunities yet.</li>'}</ul></div>
+    <div class='dash-panel'><h2>Saved opportunities</h2><ul class='clean-list'>{''.join(saved_opportunities) if saved_opportunities else '<li>No saved opportunities yet.</li>'}</ul></div>
+    <div class='dash-panel'><h2>Saved competitions</h2><ul class='clean-list'>{''.join(saved_competitions) if saved_competitions else '<li>No saved competitions yet.</li>'}</ul></div>
     <div class='dash-panel'><h2>Your funding activity</h2><p class='muted'>Pending means a payment has not yet been confirmed by the owner.</p><ul class='clean-list'>{''.join(pledge_cards) if pledge_cards else '<li>No support records yet.</li>'}</ul></div>
     <div class='dash-panel'><h2>Project messages</h2><ul class='clean-list'>{''.join(inbox_cards) if inbox_cards else '<li>No questions yet.</li>'}</ul><a href='/messages'>Open messages →</a></div>
     <div class='dash-panel'><h2>Builder checklist</h2><ol class='check-list'><li>Save an opportunity.</li><li>Create a project draft.</li><li>Upload a prototype without private details.</li><li>Submit for owner review.</li></ol></div></section>"""
@@ -1518,11 +1591,13 @@ def is_admin(user):
 
 def infer_type(title: str) -> str:
     t = title.lower()
+    # Explicit contest names take precedence, even when they offer a grant or scholarship.
+    if re.search(r'\bhackathons?\b', t): return 'Hackathon'
+    if COMPETITION_TITLE.search(t): return 'Competition'
     if "scholar" in t or "fellowship" in t: return "Scholarship"
     if "intern" in t or "trainee" in t: return "Internship"
     if "grant" in t or "fund" in t: return "Grant"
-    if "hackathon" in t: return "Hackathon"
-    if "competition" in t or "challenge" in t or "contest" in t: return "Competition"
+    if "challenge" in t: return "Competition"
     return "Opportunity"
 
 def infer_deadline(text: str) -> str:
@@ -1676,7 +1751,11 @@ def render_admin(user, msg='', query=None, msg_kind='success'):
         preview=f"<img class='link-preview-image' src='/admin/submission/preview?id={r['id']}' alt='Preview from submitted link' loading='lazy'>" if r['fetched_image'] else ''
         fetched=f"<div class='fetched-box'><strong>What we found on the page</strong><p>{e(r['fetched_summary'])}</p></div>" if r['fetched_summary'] else ''
         edit=f"""<div class='admin-edit-grid'><label>Title<input name='title' value='{e(r['title'])}' maxlength='200'></label><label>Provider<input name='provider' value='{e(r['provider'])}' maxlength='160'></label><label>Deadline<input name='deadline' value='{e(r['deadline'])}' maxlength='80'></label></div><label class='admin-summary-label'>Published summary<textarea name='summary' rows='3' maxlength='1200'>{e(r['summary'])}</textarea></label>""" if r['source_mode']=='link' else ''
-        return f"""<article class='mini-card moderation-card submission-card'>{preview}<span class='tag'>{e(r['type'])} · {'Link preview' if r['source_mode']=='link' else 'Manual entry'}</span><h3>{e(r['title'])}</h3><p>{e(r['summary'])}</p>{fetched}<p class='provider'>{e(r['submitter'])} · {e(r['submitter_email'])} · {e(r['deadline'])}</p><p><a href='{e(anchor_url(r['url']))}' target='_blank' rel='noopener noreferrer'>Open original link ↗</a></p><form method='post' action='/admin/submission/action' class='card-actions'><input type='hidden' name='csrf' value='{csrf}'><input type='hidden' name='submission_id' value='{r['id']}'>{edit}<div class='card-actions'><label class='admin-review-note'><input type='checkbox' name='confirmed' value='1'> I checked the official page</label><button name='action' value='approve' class='cta-primary slim'>Approve &amp; publish</button><button name='action' value='reject' class='ghost-button'>Reject</button></div></form></article>"""
+        choices = list(LISTING_TYPES)
+        if r['type'] not in choices: choices.append(r['type'])
+        type_options = ''.join(f"<option value='{e(t)}' {'selected' if r['type']==t else ''}>{e(t)}</option>" for t in choices)
+        type_field = f"<label>Listing type<select name='type'>{type_options}</select></label>"
+        return f"""<article class='mini-card moderation-card submission-card'>{preview}<span class='tag'>{e(r['type'])} · {'Link preview' if r['source_mode']=='link' else 'Manual entry'}</span><h3>{e(r['title'])}</h3><p>{e(r['summary'])}</p>{fetched}<p class='provider'>{e(r['submitter'])} · {e(r['submitter_email'])} · {e(r['deadline'])}</p><p><a href='{e(anchor_url(r['url']))}' target='_blank' rel='noopener noreferrer'>Open original link ↗</a></p><form method='post' action='/admin/submission/action' class='card-actions'><input type='hidden' name='csrf' value='{csrf}'><input type='hidden' name='submission_id' value='{r['id']}'>{type_field}{edit}<div class='card-actions'><label class='admin-review-note'><input type='checkbox' name='confirmed' value='1'> I checked the official page</label><button name='action' value='approve' class='cta-primary slim'>Approve &amp; publish</button><button name='action' value='reject' class='ghost-button'>Reject</button></div></form></article>"""
     sub_rows=''.join(submission_card(r) for r in submissions)
     incident_rows=''.join(f"""<article class='mini-card'><span class='tag'>Flagged · {e(i['reason'])}</span><p><strong>{e(i['name'] or 'Deleted account')}</strong> · {e(i['email'] or '')} · {e(i['title'] or 'Project removed')}</p><p class='admin-private-text'>{e(i['raw_text'])}</p><form method='post' action='/admin/message/review'><input type='hidden' name='csrf' value='{csrf}'><input type='hidden' name='kind' value='incident'><input type='hidden' name='record_id' value='{i['id']}'><button name='action' value='reviewed' class='ghost-button'>Mark reviewed</button></form></article>""" for i in incidents)
     legacy_rows=''.join(f"""<article class='mini-card'><span class='tag'>Older message · not published</span><p><strong>{e(m['name'])}</strong> · {e(m['email'])} · {e(m['title'])}</p><p class='admin-private-text'>{e(m['message'])}</p><form method='post' action='/admin/message/review' class='table-form'><input type='hidden' name='csrf' value='{csrf}'><input type='hidden' name='kind' value='legacy'><input type='hidden' name='record_id' value='{m['id']}'><button name='action' value='approve' class='ghost-button'>Publish if safe</button><button name='action' value='delete' class='ghost-button danger'>Delete</button></form></article>""" for m in legacy)
@@ -1702,7 +1781,7 @@ def render_admin(user, msg='', query=None, msg_kind='success'):
     <p class='slide-admin-warning'><strong>Storage:</strong> {e(storage_note)} Only publish photos when you have permission and any required consent, especially for minors. Removing a photo cannot recall copies already shared.</p>
     <form method='post' action='/admin/slideshow/add' enctype='multipart/form-data' class='builder-form slide-upload-form'><input type='hidden' name='csrf' value='{csrf}'><label>Choose a photo<input type='file' name='photo' accept='image/jpeg,image/png,image/webp' required><span class='form-hint'>JPEG, PNG or WebP · maximum 8 MB · metadata is removed.</span></label><label>Photo description <span class='optional'>(optional)</span><input type='text' name='caption' maxlength='160' placeholder='Describe this photo'><span class='form-hint'>Shown on the photo and used for accessibility.</span></label><button class='cta-primary slim' type='submit'>Add photo to slideshow</button></form>
     <div class='admin-slide-grid'>{slide_cards or '<p class="empty">No slideshow photos yet. Add one above to show the slideshow.</p>'}</div></div>
-    <div class='dash-panel admin-form' id='add-opportunity'><h2>Add an opportunity manually</h2><form method='post' action='/admin/opportunity/add' class='builder-form'><input type='hidden' name='csrf' value='{csrf}'><div class='form-row'><label>Type<select name='type'><option>Scholarship</option><option>Internship</option><option>Competition</option><option>Grant</option><option>Hackathon</option><option>Opportunity</option></select></label><label>Deadline<input required name='deadline' placeholder='YYYY-MM-DD or See official page'></label></div><label>Title<input required name='title'></label><div class='form-row'><label>Provider<input required name='provider'></label><label>Country / region<input required name='country' value='Global'></label></div><label>Level<input required name='level' value='Students'></label><label>Application URL<input required type='url' name='url'></label><label>Summary<textarea required name='summary' rows='4'></textarea></label><label>Tags<input name='tags'></label><button class='cta-primary'>Post opportunity</button></form></div>
+    <div class='dash-panel admin-form' id='add-opportunity'><h2>Add a listing manually</h2><p class='muted'>Choose Competition or Hackathon to place a contest in the Competitions section.</p><form method='post' action='/admin/opportunity/add' class='builder-form'><input type='hidden' name='csrf' value='{csrf}'><div class='form-row'><label>Type<select name='type'><option>Scholarship</option><option>Internship</option><option>Competition</option><option>Grant</option><option>Hackathon</option><option>Opportunity</option></select></label><label>Deadline<input required name='deadline' placeholder='YYYY-MM-DD or See official page'></label></div><label>Title<input required name='title'></label><div class='form-row'><label>Provider<input required name='provider'></label><label>Country / region<input required name='country' value='Global'></label></div><label>Level<input required name='level' value='Students'></label><label>Application URL<input required type='url' name='url'></label><label>Summary<textarea required name='summary' rows='4'></textarea></label><label>Tags<input name='tags'></label><button class='cta-primary'>Post opportunity</button></form></div>
     <div class='dash-panel'><h2>Newest opportunities</h2><div class='table-wrap'><table><thead><tr><th>Type</th><th>Title</th><th>Deadline</th><th>Link</th><th>Action</th></tr></thead><tbody>{opp_rows}</tbody></table></div></div>
     <h2 class='admin-group-title' id='automation'>3 · Automation &amp; imports</h2><div class='dash-panel'><h2>Automatic opportunity posting</h2><p class='muted'>Imports from saved sources; verify deadlines. Auto-import is {'ON' if auto_on else 'OFF'}.</p><form method='post' action='/admin/auto-sync' class='table-form'><input type='hidden' name='csrf' value='{csrf}'><input type='hidden' name='enabled' value='{'0' if auto_on else '1'}'><button class='ghost-button'>Turn {'off' if auto_on else 'on'} auto-import</button></form><form method='post' action='/admin/sync' class='table-form'><input type='hidden' name='csrf' value='{csrf}'><button class='cta-primary slim'>Sync now</button></form><ul class='clean-list'>{log_rows or '<li>No syncs yet.</li>'}</ul></div>
     <div class='dash-panel'><h2>Auto-import &amp; source links</h2><form method='post' action='/admin/source/add' class='builder-form'><input type='hidden' name='csrf' value='{csrf}'><label>Add a feed or webpage link<input name='url' type='url' placeholder='https://example.com/feed' required></label><button class='cta-primary slim'>Save link</button></form><form method='post' action='/admin/source/fetch' class='builder-form'><input type='hidden' name='csrf' value='{csrf}'><label>Fetch a one-off link<input name='url' type='url' required></label><button class='ghost-button'>Fetch now</button></form><ul class='clean-list admin-source-list'>{source_rows or '<li>No saved sources.</li>'}</ul></div>
@@ -1791,7 +1870,7 @@ class ScholarHandler(BaseHTTPRequestHandler):
         user = self.current_user()
         if not user:
             dest = self.path if self.path.startswith("/") else "/"
-            self.redirect("/login?next=" + quote(dest, safe="/?=&"))
+            self.redirect("/login?next=" + quote(dest, safe="/"))
             return None
         return user
 
@@ -1799,7 +1878,8 @@ class ScholarHandler(BaseHTTPRequestHandler):
         """Return True when the request may proceed; otherwise send a login redirect."""
         if user: return True
         dest = self.path if self.path.startswith("/") else "/"
-        self.redirect("/login?next=" + quote(dest, safe="/?=&"))
+        # Encode the entire nested URL, so its search and filters survive login.
+        self.redirect("/login?next=" + quote(dest, safe="/"))
         return False
     def verify_csrf(self, user, form=None):
         if not user: return False
@@ -1842,7 +1922,15 @@ class ScholarHandler(BaseHTTPRequestHandler):
         if path == "/verify-email": return self.handle_verify_email(query)
         if path == "/forgot-password": return self.send_html(render_forgot_password())
         if path == "/reset-password": return self.send_html(render_reset_password(query.get("token", [""])[0]))
-        if path == "/opportunities": return self.send_html(render_opportunities(user, query))
+        if path == "/opportunities":
+            # Old competition-filter links continue to work in the new section.
+            requested_type = (query.get('type', [''])[0] or '').strip().lower()
+            if requested_type in COMPETITION_TYPES:
+                target = {'type': 'Hackathon' if requested_type in ('hackathon', 'hackathons') else 'Competition'}
+                if query.get('q', [''])[0]: target['q'] = query['q'][0]
+                return self.redirect('/competitions?' + urlencode(target))
+            return self.send_html(render_opportunities(user, query))
+        if path == "/competitions": return self.send_html(render_competitions(user, query))
         if path == "/courses": return self.send_html(render_courses(user))
         if path == "/exams": return self.send_html(render_exams(user))
         if path == "/programs": return self.send_html(render_programs(user))
@@ -2046,11 +2134,15 @@ class ScholarHandler(BaseHTTPRequestHandler):
             if not user: return self.redirect("/login")
             if not self.verify_csrf(user, form): return self.send_html(page_shell("Security check failed", "<section class='panel-section'>CSRF check failed.</section>", user), 403)
             oid=form.get("opportunity_id", "")
-            if oid.isdigit():
+            destination = '/opportunities'
+            if re.fullmatch(r'[0-9]{1,18}', oid):
                 with db() as conn:
-                    if conn.execute("SELECT 1 FROM bookmarks WHERE user_id=? AND opportunity_id=?", (user["id"], int(oid))).fetchone(): conn.execute("DELETE FROM bookmarks WHERE user_id=? AND opportunity_id=?", (user["id"], int(oid)))
-                    else: conn.execute("INSERT OR IGNORE INTO bookmarks(user_id,opportunity_id,created_at) VALUES(?,?,?)", (user["id"], int(oid), now_iso()))
-            return self.redirect("/opportunities")
+                    item = conn.execute('SELECT id,type,title FROM opportunities WHERE id=?', (int(oid),)).fetchone()
+                    if item:
+                        destination = '/competitions' if is_competition_listing(item) else '/opportunities'
+                        if conn.execute("SELECT 1 FROM bookmarks WHERE user_id=? AND opportunity_id=?", (user["id"], int(oid))).fetchone(): conn.execute("DELETE FROM bookmarks WHERE user_id=? AND opportunity_id=?", (user["id"], int(oid)))
+                        else: conn.execute("INSERT OR IGNORE INTO bookmarks(user_id,opportunity_id,created_at) VALUES(?,?,?)", (user["id"], int(oid), now_iso()))
+            return self.redirect(destination)
         if path == "/project/save":
             form=self.read_form()
             if not user: return self.redirect("/login")
@@ -2617,19 +2709,22 @@ class ScholarHandler(BaseHTTPRequestHandler):
             row=conn.execute("SELECT * FROM opportunity_submissions WHERE id=?", (int(sid),)).fetchone()
             if not row: return self.send_html(render_admin(user, "Submission not found."), 404)
             if action == "approve":
+                published_type=(form.get('type') or row['type']).strip()[:80]
+                if published_type not in LISTING_TYPES and published_type != row['type']:
+                    return self.send_html(render_admin(user, 'Choose a valid listing type.'), 400)
                 title=(form.get("title") or row["title"]).strip()[:200]
                 provider=(form.get("provider") or row["provider"]).strip()[:160]
                 deadline=(form.get("deadline") or row["deadline"]).strip()[:80]
                 summary=(form.get("summary") or row["summary"]).strip()[:1200]
                 cur=conn.execute("""INSERT OR IGNORE INTO opportunities(type,title,provider,country,level,deadline,url,summary,tags,source,created_at)
                     VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-                    (row["type"], title, provider, row["country"], row["level"], deadline,
+                    (published_type, title, provider, row["country"], row["level"], deadline,
                      row["url"], summary, row["tags"], "community", now_iso()))
                 if cur.rowcount:
                     conn.execute("UPDATE opportunities SET auto_description=? WHERE id=?",
-                        (make_auto_description({"type":row["type"],"title":row["title"],"provider":row["provider"],
+                        (make_auto_description({"type":published_type,"title":title,"provider":provider,
                           "country":row["country"],"level":row["level"],"deadline":deadline,"summary":summary}), cur.lastrowid))
-                conn.execute("UPDATE opportunity_submissions SET status='approved', reviewed_at=? WHERE id=?", (now_iso(), int(sid)))
+                conn.execute("UPDATE opportunity_submissions SET type=?, status='approved', reviewed_at=? WHERE id=?", (published_type, now_iso(), int(sid)))
                 message=f"Approved and published: {title}"
             else:
                 conn.execute("UPDATE opportunity_submissions SET status='rejected', reviewed_at=? WHERE id=?", (now_iso(), int(sid)))
